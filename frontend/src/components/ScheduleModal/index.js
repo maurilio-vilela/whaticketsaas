@@ -159,11 +159,9 @@ const ScheduleModal = ({ open, onClose, scheduleId, contactId, cleanContact, rel
 				const { data } = await api.get("whatsapp", {});
 
 				setConnections(data);
-				setLoading(false);
 				//console.log(data);
 
 			} catch (err) {
-				setLoading(false);
 				toastError(err);
 			}
 		};
@@ -463,7 +461,7 @@ const ScheduleModal = ({ open, onClose, scheduleId, contactId, cleanContact, rel
 											id="repeat-every"
 											value={values.repeatEvery}
 											onChange={(e) => {
-												setRepeatEvery(e.target.value);
+												
 												setFieldValue("repeatEvery", e.target.value);
 											}}
 										>
