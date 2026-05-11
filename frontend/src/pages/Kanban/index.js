@@ -1149,7 +1149,6 @@ const Kanban = () => {
                 </DialogActions>
             </Dialog>
 
-            <Dialog
             <NewDealModal
                 open={newDealModal}
                 onClose={() => setNewDealModal(false)}
