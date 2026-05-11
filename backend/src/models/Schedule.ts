@@ -92,6 +92,12 @@ class Schedule extends Model<Schedule> {
 
   @Column
   selectDaysRecorrenci: string
+  
+  @Column
+  reminderBefore: number;
+
+  @Column
+  reminderSent: boolean;
 
 }
 
