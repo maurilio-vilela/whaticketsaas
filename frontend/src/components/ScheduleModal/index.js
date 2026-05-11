@@ -115,9 +115,9 @@ const ScheduleModal = ({ open, onClose, scheduleId, contactId, cleanContact, rel
 	const [connections, setConnections] = useState([]);
 	const [selectedConnection, setSelectedConnection] = useState("");
 	const [attachment, setAttachment] = useState(null);
-	const [campaignEditable, setCampaignEditable] = useState(true);
-	const [loading, setLoading] = useState(false);
-	const [repeatEvery, setRepeatEvery] = useState("");
+	const [campaignEditable] = useState(true);
+	
+	
 	const dias = [
 		{ pt: 'Domingo', en: 'Sunday' },
 		{ pt: 'Segunda', en: 'Monday' },
