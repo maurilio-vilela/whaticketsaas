@@ -38,7 +38,7 @@ export const index = async (req: Request, res: Response): Promise<Response> => {
 };
 
 export const store = async (req: Request, res: Response): Promise<Response> => {
-  const { text, description, dueDate, due_date, priority, completed, status, assignedUserId } = req.body;
+  const { text, description, dueDate, due_date, priority, completed, status, assignedUserId, ticketId, contactId, dealId } = req.body;
   const { companyId, id: userId } = req.user;
   const parsedUserId = parseInt(userId);
   const effectiveDueDate = dueDate || due_date; // Normalizar dueDate/due_date
@@ -59,6 +59,9 @@ export const store = async (req: Request, res: Response): Promise<Response> => {
       status,
       companyId,
       userId: parsedUserId,
+      ticketId,
+      contactId,
+      dealId,
       assignedUserId,
     });
     logger.info('POST /tasks - Tarefa criada:', task);
@@ -97,9 +100,9 @@ export const show = async (req: Request, res: Response): Promise<Response> => {
 
 export const update = async (req: Request, res: Response): Promise<Response> => {
   const { taskId } = req.params;
-  const { text, description, dueDate, due_date, priority, completed, status, assignedUserId } = req.body;
+  const { text, description, dueDate, due_date, priority, completed, status, assignedUserId, ticketId, contactId, dealId } = req.body;
   const effectiveDueDate = dueDate || due_date; // Normalizar dueDate/due_date
-  const taskData = { text, description, dueDate: effectiveDueDate, priority, completed, status, assignedUserId }; // Adicionado description
+  const taskData = { text, description, dueDate: effectiveDueDate, priority, completed, status, assignedUserId, ticketId, contactId, dealId }; // Adicionado description
   const { companyId, id: userId } = req.user;
   const parsedUserId = parseInt(userId);
   logger.info('PUT /tasks/:taskId - Dados recebidos:', { taskId, taskData, companyId, userId: parsedUserId });

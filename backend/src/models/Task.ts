@@ -13,6 +13,9 @@ import {
 } from 'sequelize-typescript';
 import Company from './Company';
 import User from './User';
+import Ticket from './Ticket';
+import Contact from './Contact';
+import Deal from './Deal';
 
 @Table({ tableName: 'Tasks', timestamps: true, underscored: true })
 class Task extends Model<Task> {
@@ -70,6 +73,26 @@ class Task extends Model<Task> {
 
   @BelongsTo(() => User, { foreignKey: 'assigned_user_id' })
   assignedUser!: User; // Relação com o usuário designado
+  @ForeignKey(() => Ticket)
+  @Column({ field: "ticket_id", allowNull: true })
+  ticketId!: number | null;
+
+  @BelongsTo(() => Ticket)
+  ticket!: Ticket;
+
+  @ForeignKey(() => Contact)
+  @Column({ field: "contact_id", allowNull: true })
+  contactId!: number | null;
+
+  @BelongsTo(() => Contact)
+  contact!: Contact;
+
+  @ForeignKey(() => Deal)
+  @Column({ field: "deal_id", allowNull: true })
+  dealId!: number | null;
+
+  @BelongsTo(() => Deal)
+  deal!: Deal;
 }
 
 export default Task;

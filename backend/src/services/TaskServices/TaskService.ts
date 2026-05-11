@@ -12,7 +12,10 @@ interface TaskData {
   status?: 'todo' | 'doing' | 'done';
   companyId: number;
   userId: number;
-  assignedUserId?: number; // Adicionado
+  assignedUserId?: number;
+  ticketId?: number;
+  contactId?: number;
+  dealId?: number;
 }
 
 interface ListTasksParams {
