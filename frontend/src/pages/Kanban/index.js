@@ -4,6 +4,9 @@ import api from "../../services/api";
 import { AuthContext } from "../../context/Auth/AuthContext";
 import Board from "react-trello";
 import { toast } from "react-toastify";
+import KanbanKPIs from "../../components/KanbanKPIs";
+import KanbanFilters from "../../components/KanbanFilters";
+import NewDealModal from "../../components/NewDealModal";
 import LaneTitle from "../../components/Kanban/LaneTitle";
 import CardTitle from "../../components/Kanban/CardTitle";
 import FooterButtons from "../../components/Kanban/FooterButtons";
@@ -450,21 +453,6 @@ const currencyMask = (value) => {
 };
 
 // Componente Cartão KPI
-const KpiCard = ({ icon, color, label, value, sub, visible }) => {
-    const classes = useStyles();
-    return (
-        <div className={classes.kpiCard}>
-            <div className={classes.kpiIconBox} style={{ backgroundColor: `${color}20`, color: color }}>
-                {icon}
-            </div>
-            <div className={classes.kpiContent}>
-                <span className={classes.kpiLabel}>{label}</span>
-                <span className={classes.kpiValue}>{visible ? value : "••••••"}</span>
-                <span className={classes.kpiSub}>{sub}</span>
-            </div>
-        </div>
-    );
-};
 
 const Kanban = () => {
     const classes = useStyles();
@@ -929,89 +917,6 @@ const Kanban = () => {
     const formatBRL = (value) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
 
     // === CAMPOS DE FILTRO (Reutilizável) ===
-    const FilterFields = () => (
-        <>
-            <div className={classes.searchWrapper}>
-                <Search style={{ color: "#9CA3AF" }} />
-                <input
-                    className={classes.searchInput}
-                    placeholder="Buscar..."
-                    value={filter.search}
-                    onChange={(e) => setFilter({ ...filter, search: e.target.value })}
-                />
-            </div>
-            <FormControl variant="outlined" className={classes.filterSelect} size="small" fullWidth={isMobile}>
-                <InputLabel>Visualização</InputLabel>
-                <Select
-                    value={filter.visualization}
-                    onChange={(e) => setFilter({ ...filter, visualization: e.target.value })}
-                    label="Visualização"
-                >
-                    <MenuItem value="mine">Minhas Lanes</MenuItem>
-                    {user.profile === "admin" && <MenuItem value="all">Todas as Lanes</MenuItem>}
-                </Select>
-            </FormControl>
-            {filter.visualization === "all" && user.profile === "admin" && (
-                <FormControl variant="outlined" className={classes.filterSelect} size="small" fullWidth={isMobile}>
-                    <InputLabel>Operador</InputLabel>
-                    <Select
-                        value={filter.selectedUser}
-                        onChange={(e) => setFilter({ ...filter, selectedUser: e.target.value })}
-                        label="Operador"
-                    >
-                        <MenuItem value="all">Todos</MenuItem>
-                        {users.map((u) => (
-                            <MenuItem key={u.id} value={u.id}>
-                                {u.name}
-                            </MenuItem>
-                        ))}
-                    </Select>
-                </FormControl>
-            )}
-            <FormControl variant="outlined" className={classes.filterSelect} size="small" fullWidth={isMobile}>
-                <InputLabel>Etapas</InputLabel>
-                <Select
-                    value={filter.laneId}
-                    onChange={(e) => setFilter({ ...filter, laneId: e.target.value })}
-                    label="Etapas"
-                >
-                    <MenuItem value="all">Todas</MenuItem>
-                    <MenuItem value={0}>Em Aberto</MenuItem>
-                    {tags.map((t) => (
-                        <MenuItem key={t.id} value={t.id}>
-                            {t.name}
-                        </MenuItem>
-                    ))}
-                </Select>
-            </FormControl>
-            <FormControl variant="outlined" className={classes.filterSelect} size="small" fullWidth={isMobile}>
-                <InputLabel>Período</InputLabel>
-                <Select
-                    value={filter.period}
-                    onChange={(e) => setFilter({ ...filter, period: e.target.value })}
-                    label="Período"
-                >
-                    <MenuItem value="all">Todos</MenuItem>
-                    <MenuItem value="today">Hoje</MenuItem>
-                    <MenuItem value="week">Esta semana</MenuItem>
-                    <MenuItem value="month">Este mês</MenuItem>
-                </Select>
-            </FormControl>
-            <FormControl variant="outlined" className={classes.filterSelect} size="small" fullWidth={isMobile}>
-                <InputLabel>Valor</InputLabel>
-                <Select
-                    value={filter.value}
-                    onChange={(e) => setFilter({ ...filter, value: e.target.value })}
-                    label="Valor"
-                >
-                    <MenuItem value="all">Todos</MenuItem>
-                    <MenuItem value="high">Acima de R$ 5k</MenuItem>
-                    <MenuItem value="mid">R$ 1k - 5k</MenuItem>
-                    <MenuItem value="low">R$ 0 - 1k</MenuItem>
-                </Select>
-            </FormControl>
-        </>
-    );
 
     // === RENDERIZAÇÃO MOBILE (NOVO) ===
     const renderMobileBoard = () => {
@@ -1132,72 +1037,7 @@ const Kanban = () => {
                 </div>
             </div>
 
-            <div className={classes.kpiContainer}>
-                <KpiCard
-                    icon={<Assessment />}
-                    color="#3B82F6"
-                    label="Oportunidades Ativas"
-                    value={kpiData.activeDealsCount}
-                    sub="Em negociação"
-                    visible={true}
-                />
-                {!isMobile && (
-                    <>
-                        <KpiCard
-                            icon={<MonetizationOn />}
-                            color="#10B981"
-                            label="Vendas Ganhas"
-                            value={kpiData.wonDealsCount}
-                            sub={formatBRL(kpiData.wonDealsValue)}
-                            visible={showValues}
-                        />
-                        <KpiCard
-                            icon={<ThumbDown />}
-                            color="#EF4444"
-                            label="Vendas Perdidas"
-                            value={kpiData.lostDealsCount}
-                            sub={formatBRL(kpiData.lostDealsValue)}
-                            visible={showValues}
-                        />
-                    </>
-                )}
-                <KpiCard
-                    icon={<AttachMoney />}
-                    color="#14B8A6"
-                    label="Valor Ganho"
-                    value={formatBRL(kpiData.wonDealsValue)}
-                    sub="Total fechado"
-                    visible={showValues}
-                />
-                {!isMobile && (
-                    <>
-                        <KpiCard
-                            icon={<AttachMoney />}
-                            color="#F43F5E"
-                            label="Valor Perdido"
-                            value={formatBRL(kpiData.lostDealsValue)}
-                            sub="Total perdido"
-                            visible={showValues}
-                        />
-                    </>
-                )}
-                <KpiCard
-                    icon={<TrendingUp />}
-                    color="#F97316"
-                    label="Taxa Conversão"
-                    value={`${kpiData.conversionRate.toFixed(1)}%`}
-                    sub="Ganhas / Total"
-                    visible={true}
-                />
-                <KpiCard
-                    icon={<AttachMoney />}
-                    color="#F59E0B"
-                    label="Ticket Médio"
-                    value={formatBRL(kpiData.averageTicket)}
-                    sub="Valor Médio por Venda"
-                    visible={showValues}
-                />
-            </div>
+            <KanbanKPIs kpiData={kpiData} showValues={showValues} isMobile={isMobile} />
 
             {/* BARRA DE AÇÕES (DESKTOP) */}
             {!isMobile && (
@@ -1212,7 +1052,7 @@ const Kanban = () => {
                         Novo Negócio
                     </Button>
                     <div className={classes.filterContainer}>
-                        <FilterFields />
+                        <KanbanFilters filter={filter} setFilter={setFilter} user={user} users={users} tags={tags} isMobile={isMobile} />
                     </div>
                 </div>
             )}
@@ -1300,7 +1140,7 @@ const Kanban = () => {
             <Dialog open={mobileFilterOpen} onClose={() => setMobileFilterOpen(false)} fullWidth>
                 <DialogTitle>Filtros</DialogTitle>
                 <DialogContent dividers className={classes.mobileFilterContent}>
-                    <FilterFields />
+                    <KanbanFilters filter={filter} setFilter={setFilter} user={user} users={users} tags={tags} isMobile={isMobile} />
                 </DialogContent>
                 <DialogActions>
                     <Button onClick={() => setMobileFilterOpen(false)} color="primary">
@@ -1310,116 +1150,18 @@ const Kanban = () => {
             </Dialog>
 
             <Dialog
+            <NewDealModal
                 open={newDealModal}
                 onClose={() => setNewDealModal(false)}
-                maxWidth="md"
-                fullWidth
-                classes={{ paper: classes.modalPaper }}
-                fullScreen={isMobile}
-            >
-                <DialogTitle style={{ backgroundColor: theme.palette.primary.main, color: "#fff" }}>
-                    Adicionar Oportunidade
-                </DialogTitle>
-                <DialogContent style={{ paddingTop: 0 }}>
-                    <Tabs
-                        value={tabValue}
-                        onChange={(e, v) => setTabValue(v)}
-                        indicatorColor="primary"
-                        textColor="primary"
-                        className={classes.tabHeader}
-                        variant={isMobile ? "fullWidth" : "standard"}
-                    >
-                        <Tab label="Dados Gerais" />
-                        <Tab label="Info Adicional" />
-                    </Tabs>
-                    {tabValue === 0 && (
-                        <Grid container spacing={2}>
-                            <Grid item xs={12}>
-                                <Autocomplete
-                                    fullWidth
-                                    options={contacts}
-                                    loading={contacts.length === 0}
-                                    getOptionLabel={(option) => option.name}
-                                    onChange={(e, value) => setNewDealData({ ...newDealData, contactId: value?.id })}
-                                    onInputChange={(e, v) => fetchContacts(v)}
-                                    renderInput={(params) => (
-                                        <TextField {...params} label="Contato" variant="outlined" required />
-                                    )}
-                                />
-                            </Grid>
-                            <Grid item xs={12} sm={6}>
-                                <FormControl variant="outlined" fullWidth>
-                                    <InputLabel>Etapa do Funil</InputLabel>
-                                    <Select
-                                        label="Etapa do Funil"
-                                        value={newDealData.laneId}
-                                        onChange={(e) => setNewDealData({ ...newDealData, laneId: e.target.value })}
-                                    >
-                                        {tags.map((t) => (
-                                            <MenuItem key={t.id} value={t.id}>
-                                                {t.name}
-                                            </MenuItem>
-                                        ))}
-                                    </Select>
-                                </FormControl>
-                            </Grid>
-                            <Grid item xs={12} sm={6}>
-                                <TextField
-                                    fullWidth
-                                    label="Valor da Oportunidade"
-                                    variant="outlined"
-                                    value={newDealData.value}
-                                    onChange={(e) =>
-                                        setNewDealData({ ...newDealData, value: currencyMask(e.target.value) })
-                                    }
-                                    InputProps={{
-                                        startAdornment: <InputAdornment position="start">R$</InputAdornment>,
-                                    }}
-                                />
-                            </Grid>
-                            <Grid item xs={12}>
-                                <TextField
-                                    fullWidth
-                                    label="Título / Produto"
-                                    variant="outlined"
-                                    placeholder="Ex: Consultoria de Vendas"
-                                    value={newDealData.title}
-                                    onChange={(e) => setNewDealData({ ...newDealData, title: e.target.value })}
-                                />
-                            </Grid>
-                        </Grid>
-                    )}
-                    {tabValue === 1 && (
-                        <Grid container spacing={2}>
-                            <Grid item xs={12}>
-                                <TextField
-                                    fullWidth
-                                    label="Anotações / Descrição"
-                                    variant="outlined"
-                                    multiline
-                                    rows={4}
-                                    value={newDealData.notes}
-                                    onChange={(e) => setNewDealData({ ...newDealData, notes: e.target.value })}
-                                />
-                            </Grid>
-                            <Grid item xs={12} sm={6}>
-                                <TextField fullWidth label="Campo Personalizado 1" variant="outlined" />
-                            </Grid>
-                            <Grid item xs={12} sm={6}>
-                                <TextField fullWidth label="Campo Personalizado 2" variant="outlined" />
-                            </Grid>
-                        </Grid>
-                    )}
-                </DialogContent>
-                <DialogActions style={{ padding: "20px" }}>
-                    <Button onClick={() => setNewDealModal(false)} color="secondary" style={{ marginRight: 10 }}>
-                        Cancelar
-                    </Button>
-                    <Button onClick={handleCreateNewDeal} color="primary" variant="contained" size="large">
-                        Salvar
-                    </Button>
-                </DialogActions>
-            </Dialog>
+                isMobile={isMobile}
+                classes={classes}
+                contacts={contacts}
+                fetchContacts={fetchContacts}
+                tags={tags}
+                newDealData={newDealData}
+                setNewDealData={setNewDealData}
+                handleCreateNewDeal={handleCreateNewDeal}
+            />
             <Dialog open={laneModalOpen} onClose={() => setLaneModalOpen(false)}>
                 <DialogTitle>Alterar Ordem da Coluna</DialogTitle>
                 <DialogContent>
