@@ -98,6 +98,7 @@ const ScheduleModal = ({ open, onClose, scheduleId, contactId, cleanContact, rel
 		geral: "",
 		queueId: "",
 		whatsappId: "",
+		reminderBefore: 0,
 		repeatEvery: "",
 		selectDaysRecorrenci: ""
 	};
@@ -522,6 +523,21 @@ const ScheduleModal = ({ open, onClose, scheduleId, contactId, cleanContact, rel
 										variant="outlined"
 										fullWidth
 									/>
+									<FormControl variant="outlined" fullWidth>
+										<InputLabel>Lembrete Prévio</InputLabel>
+										<Select
+											label="Lembrete Prévio"
+											value={schedule.reminderBefore || 0}
+											onChange={(e) => setSchedule({ ...schedule, reminderBefore: e.target.value })}
+										>
+											<MenuItem value={0}>Sem lembrete</MenuItem>
+											<MenuItem value={15}>15 minutos antes</MenuItem>
+											<MenuItem value={30}>30 minutos antes</MenuItem>
+											<MenuItem value={60}>1 hora antes</MenuItem>
+											<MenuItem value={120}>2 horas antes</MenuItem>
+											<MenuItem value={1440}>1 dia antes</MenuItem>
+										</Select>
+									</FormControl>
 								</div>
 								{(schedule.mediaPath || attachment) && (
 									<Grid container spacing={1} alignItems="center">

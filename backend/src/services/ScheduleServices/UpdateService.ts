@@ -19,6 +19,7 @@ interface ScheduleData {
   repeatEvery?:string;
   repeatDailyInput?:string;
   repeatCount?:string;
+  reminderBefore?: number;
   selectDaysRecorrenci?: string;
 }
 

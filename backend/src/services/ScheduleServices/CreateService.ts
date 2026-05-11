@@ -18,6 +18,7 @@ interface Request {
   repeatEvery?:string;
   selectDaysRecorrenci?: string;
   repeatCount?:string;
+  reminderBefore?: number;
 }
 
 const CreateService = async ({
@@ -34,6 +35,7 @@ const CreateService = async ({
   repeatEvery,
   selectDaysRecorrenci,
   repeatCount,
+  reminderBefore,
 }: Request): Promise<Schedule> => {
   const schema = Yup.object().shape({
     body: Yup.string().required().min(5),
@@ -64,6 +66,7 @@ const CreateService = async ({
       repeatEvery,
       selectDaysRecorrenci,
       repeatCount,
+  reminderBefore,
     }
   );
 

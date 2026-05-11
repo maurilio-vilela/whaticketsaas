@@ -50,7 +50,9 @@ export const store = async (req: Request, res: Response): Promise<Response> => {
     whatsappId,
     repeatEvery,
     selectDaysRecorrenci,
+    reminderBefore,
     repeatCount,
+    reminderBefore,
   } = formatInfo;
   const { companyId } = req.user;
 
@@ -70,7 +72,9 @@ export const store = async (req: Request, res: Response): Promise<Response> => {
     mediaName: file?.originalname,
     repeatEvery,
     selectDaysRecorrenci,
+    reminderBefore,
     repeatCount,
+    reminderBefore,
   });
 
   const io = getIO();
@@ -91,6 +95,7 @@ export const show = async (req: Request, res: Response): Promise<Response> => {
   return res.status(200).json(schedule);
 };
 
+// Update function handled below
 export const update = async (
   req: Request,
   res: Response

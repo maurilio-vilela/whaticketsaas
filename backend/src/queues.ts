@@ -234,6 +234,39 @@ async function VerifyRecorrenciDate(schedule) {
   }
 }
 
+async function handleVerifyScheduleReminders(job) {
+  try {
+    const schedules = await Schedule.findAll({
+      where: {
+        status: "PENDENTE",
+        sentAt: null,
+        reminderBefore: { [Op.gt]: 0 },
+        reminderSent: false
+      },
+      include: [{ model: Contact, as: "contact", attributes: ["id", "name", "number"] }]
+    });
+
+    for (const schedule of schedules) {
+      const now = moment();
+      const sendAt = moment(schedule.sendAt);
+      const reminderTime = sendAt.clone().subtract(schedule.reminderBefore, "minutes");
+
+      if (now.isSameOrAfter(reminderTime)) {
+        await schedule.update({ reminderSent: true });
+        
+        await sendScheduledMessages.add(
+          "SendMessage",
+          { schedule: { ...schedule.toJSON(), isReminder: true } },
+          { removeOnComplete: true }
+        );
+        logger.info(`Lembrete de agendamento enviado para: ${schedule.contact.name}`);
+      }
+    }
+  } catch (e: any) {
+    logger.error(`VerifyScheduleReminders -> error: ${e.message}`);
+  }
+}
+
 async function handleVerifySchedules(job) {
   try {
     const BATCH_SIZE = 100;
@@ -317,6 +350,12 @@ async function handleSendScheduledMessage(job) {
     const wbot = await getWbot(whatsapp.id);
     const contactNumber = schedule.contact.number;
     const chatId = `${contactNumber}@s.whatsapp.net`;
+
+    if (schedule.isReminder) {
+      const reminderText = `*Lembrete Automático*: Você tem um compromisso agendado para ${moment(schedule.sendAt).format("DD/MM/YYYY [às] HH:mm")}.`;
+      await wbot.sendMessage(chatId, { text: reminderText });
+      return;
+    }
 
     if (schedule.geral === true) {
       const ticket = await FindOrCreateTicketService(
@@ -791,6 +830,7 @@ export async function startQueueProcess() {
 
   messageQueue.process("SendMessage", 1, handleSendMessage);
   scheduleMonitor.process("Verify", 1, handleVerifySchedules);
+  scheduleMonitor.process("VerifyReminder", 1, handleVerifyScheduleReminders);
   schedulesRecorrenci.process("VerifyRecorrenci", 1, handleVerifySchedulesRecorrenci);
   sendScheduledMessages.process("SendMessage", 1, handleSendScheduledMessage);
   campaignQueue.process("VerifyCampaigns", 1, handleVerifyCampaigns);
@@ -800,6 +840,11 @@ export async function startQueueProcess() {
   userMonitor.process("VerifyLoginStatus", 1, handleLoginStatus);
   ticketCloseQueue.process("CloseTickets", 1, async (job) => {
     await ClosedAllOpenTickets(job.data.companyId);
+  });
+
+  scheduleMonitor.add("VerifyReminder", {}, {
+    repeat: { cron: "*/30 * * * * *" },
+    removeOnComplete: true
   });
 
   scheduleMonitor.add("Verify", {}, {
