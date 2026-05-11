@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useContext } from "react";
 import { toast } from "react-toastify";
 import {
   Button,
@@ -7,11 +7,16 @@ import {
   DialogContent,
   DialogTitle,
   TextField,
-  makeStyles
+  makeStyles,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
+  Grid
 } from "@material-ui/core";
-import { i18n } from "../../translate/i18n";
 import api from "../../services/api";
 import ButtonWithSpinner from "../ButtonWithSpinner";
+import { AuthContext } from "../../context/Auth/AuthContext";
 
 const useStyles = makeStyles((theme) => ({
   root: {
@@ -22,16 +27,32 @@ const useStyles = makeStyles((theme) => ({
     marginRight: theme.spacing(1),
     flex: 1,
   },
+  formControl: {
+    width: "100%",
+  }
 }));
 
 const TicketTaskModal = ({ modalOpen, onClose, ticket }) => {
   const classes = useStyles();
+  const { user } = useContext(AuthContext);
   const [loading, setLoading] = useState(false);
-  const [task, setTask] = useState({ title: "", description: "", limitDate: "" });
+  
+  // Adaptado para bater exatamente com a tabela/interface "Tasks" do backend
+  const [task, setTask] = useState({ 
+      text: "", 
+      description: "", 
+      dueDate: "",
+      priority: "Medium" 
+  });
 
   useEffect(() => {
     if (modalOpen) {
-      setTask({ title: "", description: "", limitDate: "" });
+      setTask({ 
+          text: "", 
+          description: "", 
+          dueDate: "",
+          priority: "Medium" 
+      });
     }
   }, [modalOpen]);
 
@@ -45,19 +66,27 @@ const TicketTaskModal = ({ modalOpen, onClose, ticket }) => {
   };
 
   const handleSave = async () => {
-    if (!task.title) return;
+    if (!task.text || !task.dueDate) {
+        toast.error("Título (texto) e data limite são obrigatórios!");
+        return;
+    }
     setLoading(true);
     try {
-      // Ajuste conforme seu endpoint de tarefas
+      // POST para o backend do Todolist
       await api.post("/tasks", {
-        ...task,
+        text: task.text,
+        description: task.description,
+        dueDate: task.dueDate,
+        priority: task.priority,
         ticketId: ticket.id,
-        contactId: ticket.contactId
+        contactId: ticket?.contact?.id || ticket?.contactId,
+        assignedUserId: user?.id
       });
-      toast.success("Tarefa criada com sucesso!");
+      toast.success("Tarefa criada e vinculada ao Ticket!");
       handleClose();
     } catch (err) {
-      toast.error("Erro ao criar tarefa");
+      console.error(err);
+      toast.error("Erro ao criar a tarefa");
     } finally {
       setLoading(false);
     }
@@ -65,47 +94,69 @@ const TicketTaskModal = ({ modalOpen, onClose, ticket }) => {
 
   return (
     <Dialog open={modalOpen} onClose={handleClose} maxWidth="sm" fullWidth>
-      <DialogTitle>Nova Tarefa</DialogTitle>
+      <DialogTitle>Adicionar Tarefa ao Ticket</DialogTitle>
       <DialogContent dividers>
-        <TextField
-          label="Título"
-          name="title"
-          value={task.title}
-          onChange={handleChange}
-          variant="outlined"
-          fullWidth
-          margin="dense"
-          autoFocus
-        />
-        <TextField
-          label="Descrição"
-          name="description"
-          value={task.description}
-          onChange={handleChange}
-          variant="outlined"
-          fullWidth
-          margin="dense"
-          multiline
-          rows={3}
-        />
-        <TextField
-          label="Data Limite"
-          name="limitDate"
-          type="datetime-local"
-          value={task.limitDate}
-          onChange={handleChange}
-          variant="outlined"
-          fullWidth
-          margin="dense"
-          InputLabelProps={{ shrink: true }}
-        />
+        <Grid container spacing={2}>
+            <Grid item xs={12}>
+                <TextField
+                label="O que precisa ser feito? (Título)"
+                name="text"
+                value={task.text}
+                onChange={handleChange}
+                variant="outlined"
+                fullWidth
+                autoFocus
+                required
+                />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+                <TextField
+                label="Data Limite"
+                name="dueDate"
+                type="datetime-local"
+                value={task.dueDate}
+                onChange={handleChange}
+                variant="outlined"
+                fullWidth
+                required
+                InputLabelProps={{ shrink: true }}
+                />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+                <FormControl variant="outlined" className={classes.formControl}>
+                    <InputLabel>Prioridade</InputLabel>
+                    <Select
+                        name="priority"
+                        value={task.priority}
+                        onChange={handleChange}
+                        label="Prioridade"
+                    >
+                        <MenuItem value="Low">Baixa</MenuItem>
+                        <MenuItem value="Medium">Média</MenuItem>
+                        <MenuItem value="High">Alta</MenuItem>
+                    </Select>
+                </FormControl>
+            </Grid>
+            <Grid item xs={12}>
+                <TextField
+                label="Descrição / Detalhes"
+                name="description"
+                value={task.description}
+                onChange={handleChange}
+                variant="outlined"
+                fullWidth
+                multiline
+                rows={3}
+                />
+            </Grid>
+        </Grid>
       </DialogContent>
       <DialogActions>
         <Button onClick={handleClose} color="secondary" variant="outlined">
           Cancelar
         </Button>
         <ButtonWithSpinner loading={loading} onClick={handleSave} color="primary" variant="contained">
-          Salvar
+          Salvar Tarefa
         </ButtonWithSpinner>
       </DialogActions>
     </Dialog>

@@ -7,10 +7,13 @@ import Company from "./models/Company";
 import { startQueueProcess } from "./queues";
 import { TransferTicketQueue } from "./wbotTransferTicketQueue";
 import cron from "node-cron";
+import { startTaskScheduler } from "./services/TaskServices/TaskScheduler";
 
 
 const server = app.listen(process.env.PORT, async () => {
   const companies = await Company.findAll();
+  logger.info("Iniciando Agendador de Tarefas (Todolist)...");
+  startTaskScheduler();
   const allPromises: any[] = [];
   companies.map(async c => {
   
