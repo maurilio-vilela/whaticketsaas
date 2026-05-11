@@ -7,8 +7,11 @@ import Dashboard from "../pages/Dashboard/";
 import TicketResponsiveContainer from "../pages/TicketResponsiveContainer";
 import Signup from "../pages/Signup/";
 import Login from "../pages/Login/";
+import PrivacyPolicy from "../pages/PrivacyPolicy/";
+import Terms from "../pages/Terms/";
 import Connections from "../pages/Connections/";
 import SettingsCustom from "../pages/SettingsCustom/";
+import Relatorios from "../pages/Relatórios";
 import Financeiro from "../pages/Financeiro/";
 import Users from "../pages/Users";
 import Contacts from "../pages/Contacts/";
@@ -38,6 +41,8 @@ import Subscription from "../pages/Subscription/";
 import Files from "../pages/Files/";
 import Prompts from "../pages/Prompts";
 import QueueIntegration from "../pages/QueueIntegration";
+import LogLauncher from "../pages/LogLauncher";
+
 import ForgetPassword from "../pages/ForgetPassWord/"; // Reset PassWd
 
 const Routes = () => {
@@ -58,6 +63,8 @@ const Routes = () => {
           <Switch>
             <Route exact path="/login" component={Login} />
             <Route exact path="/signup" component={Signup} />
+            <Route exact path="/terms" component={Terms} />
+            <Route exact path="/privacy" component={PrivacyPolicy} />
 			<Route exact path="/forgetpsw" component={ForgetPassword} /> 
             {/* <Route exact path="/create-company" component={Companies} /> */}
             <WhatsAppsProvider>
@@ -99,6 +106,7 @@ const Routes = () => {
                 <Route exact path="/users" component={Users} isPrivate />
                 <Route exact path="/files" component={Files} isPrivate />
                 <Route exact path="/prompts" component={Prompts} isPrivate />
+				<Route exact path="/LogLauncher" component={LogLauncher} isPrivate />
                 <Route exact path="/queue-integration" component={QueueIntegration} isPrivate />
 					{/*<Route exact path="/kanban-schedules" component={kanbanSchedules} isPrivate />*/}
                 <Route
@@ -119,6 +127,12 @@ const Routes = () => {
                   component={Kanban}
                   isPrivate
                 />
+				<Route
+                  exact
+                  path="/relatorios"
+                  component={Relatorios}
+                  isPrivate
+                />				
                 <Route
                   exact
                   path="/financeiro"

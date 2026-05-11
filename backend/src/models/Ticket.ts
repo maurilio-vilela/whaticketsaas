@@ -120,6 +120,10 @@ class Ticket extends Model<Ticket> {
   @Default(false)
   @Column
   useIntegration: boolean;
+  
+  @Default(0)
+  @Column
+  dealValue: number; // Pode usar DataType.DECIMAL(10, 2) se preferir precisão exata no migration
 
   @ForeignKey(() => QueueIntegrations)
   @Column

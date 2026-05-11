@@ -9,7 +9,9 @@ import Message from "../models/Message";
 import Queue from "../models/Queue";
 import User from "../models/User";
 import Whatsapp from "../models/Whatsapp";
+import { lookup } from 'mime-types';
 import { isNil } from "lodash";
+import QuickMessage from "../models/QuickMessage";
 import CreateOrUpdateContactService from "../services/ContactServices/CreateOrUpdateContactService";
 import SendWhatsAppReaction from "../services/WbotServices/SendWhatsAppReaction";
 import ListMessagesService from "../services/MessageServices/ListMessagesService";
@@ -25,6 +27,7 @@ import path from "path";
 import SendWhatsAppMessage from "../services/WbotServices/SendWhatsAppMessage";
 import EditWhatsAppMessage from "../services/WbotServices/EditWhatsAppMessage";
 import ShowMessageService, { GetWhatsAppFromMessage } from "../services/MessageServices/ShowMessageService";
+
 type IndexQuery = {
   pageNumber: string;
 };
@@ -34,7 +37,7 @@ type MessageData = {
   fromMe: boolean;
   read: boolean;
   quotedMsg?: Message;
-  number?: string;
+  number?: string | number; // Atualizado para aceitar o formato do n8n
   closeTicket?: true;
 };
 
@@ -75,7 +78,6 @@ export const store = async (req: Request, res: Response): Promise<Response> => {
 
   SetTicketMessagesAsRead(ticket);
 
-  console.log('bodyyyyyyyyyy:', body)
   if (medias) {
     await Promise.all(
       medias.map(async (media: Express.Multer.File, index) => {
@@ -112,30 +114,33 @@ export const send = async (req: Request, res: Response): Promise<Response> => {
   const messageData: MessageData = req.body;
   const medias = req.files as Express.Multer.File[];
 
-  console.log('messageData;', messageData)
-
   try {
     const whatsapp = await Whatsapp.findByPk(whatsappId);
 
     if (!whatsapp) {
-      throw new Error("Não foi possível realizar a operação");
+      throw new Error("Não foi possível realizar a operação: Conexão não encontrada.");
     }
 
     if (messageData.number === undefined) {
       throw new Error("O número é obrigatório");
     }
 
-    const numberToTest = messageData.number;
+    // BLINDAGEM 1: Força o número vindo do n8n a virar String
+    const numberToTest = `${messageData.number}`;
     const body = messageData.body;
-
     const companyId = whatsapp.companyId;
 
     const CheckValidNumber = await CheckContactNumber(numberToTest, companyId);
     const number = CheckValidNumber.jid.replace(/\D/g, "");
-    const profilePicUrl = await GetProfilePicUrl(
-      number,
-      companyId
-    );
+    
+    // BLINDAGEM 2: Previne que contatos sem foto quebrem a API
+    let profilePicUrl = "";
+    try {
+        profilePicUrl = await GetProfilePicUrl(number, companyId);
+    } catch (e) {
+        console.log(`[API SEND] Foto de perfil indisponível ou oculta para ${number}`);
+    }
+
     const contactData = {
       name: `${number}`,
       number,
@@ -145,7 +150,6 @@ export const send = async (req: Request, res: Response): Promise<Response> => {
     };
 
     const contact = await CreateOrUpdateContactService(contactData);
-
     const ticket = await FindOrCreateTicketService(contact, whatsapp.id!, 0, companyId);
 
     if (medias) {
@@ -172,7 +176,6 @@ export const send = async (req: Request, res: Response): Promise<Response> => {
       await ticket.update({
         lastMessage: body,
       });
-
     }
 
     if (messageData.closeTicket) {
@@ -189,20 +192,16 @@ export const send = async (req: Request, res: Response): Promise<Response> => {
 
     return res.send({ mensagem: "Mensagem enviada" });
   } catch (err: any) {
-    if (Object.keys(err).length === 0) {
-      throw new AppError(
-        "Não foi possível enviar a mensagem, tente novamente em alguns instantes"
-      );
-    } else {
-      throw new AppError(err.message);
-    }
+    // BLINDAGEM 3: Fim do mascaramento de erros. Agora você saberá exatamente o que quebrou.
+    console.error("❌ ERRO REAL NO ENVIO VIA API (n8n):", err);
+    throw new AppError(err.message || "Falha interna ao enviar a mensagem.");
   }
 };
 
 export const addReaction = async (req: Request, res: Response): Promise<Response> => {
   try {
     const {messageId} = req.params;
-    const {type} = req.body; // O tipo de reação, por exemplo, 'like', 'heart', etc.
+    const {type} = req.body; 
     const {companyId, id} = req.user;
 
     const message = await Message.findByPk(messageId);
@@ -215,14 +214,12 @@ export const addReaction = async (req: Request, res: Response): Promise<Response
       return res.status(404).send({message: "Mensagem não encontrada"});
     }
 
-    // Envia a reação via WhatsApp
     const reactionResult = await SendWhatsAppReaction({
       messageId: messageId,
       ticket: ticket,
       reactionType: type
     });
 
-    // Atualiza a mensagem com a nova reação no banco de dados (opcional, dependendo da necessidade)
     const updatedMessage = await message.update({
       reactions: [...message.reactions, {type: type, userId: id}]
     });
@@ -238,7 +235,7 @@ export const addReaction = async (req: Request, res: Response): Promise<Response
       reactionResult,
       reactions: updatedMessage.reactions
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error('Erro ao adicionar reação:', error);
     if (error instanceof AppError) {
       return res.status(400).send({message: error.message});
@@ -247,10 +244,10 @@ export const addReaction = async (req: Request, res: Response): Promise<Response
   }
 };
 
-function obterNomeEExtensaoDoArquivo(url) {
+function obterNomeEExtensaoDoArquivo(url: string) {
   var urlObj = new URL(url);
   var pathname = urlObj.pathname;
-  var filename = pathname.split('/').pop();
+  var filename = pathname.split('/').pop() || "";
   var parts = filename.split('.');
 
   var nomeDoArquivo = parts[0];
@@ -301,13 +298,13 @@ export const forwardMessage = async (
   if (isNil(createTicket?.queueId)) {
     ticketData = {
       status: createTicket.isGroup ? "group" : "open",
-      userId: requestUser.id,
+      userId: requestUser?.id,
       queueId: ticket.queueId
     }
   } else {
     ticketData = {
       status: createTicket.isGroup ? "group" : "open",
-      userId: requestUser.id
+      userId: requestUser?.id
     }
   }
 
@@ -319,7 +316,7 @@ export const forwardMessage = async (
 
   let body = message.body;
   if (message.mediaType === 'conversation' || message.mediaType === 'extendedTextMessage') {
-    await SendWhatsAppMessage({ body, ticket: createTicket, quotedMsg, isForwarded: message.fromMe ? false : true });
+    await SendWhatsAppMessage({ body, ticket: createTicket, quotedMsg, isForwarded: !message.fromMe });
   } else {
 
     const mediaUrl = message.mediaUrl.replace(`:${process.env.PORT}`, '');
@@ -331,7 +328,7 @@ export const forwardMessage = async (
 
     const publicFolder = path.join(__dirname, '..', '..', '..', 'backend', 'public');
 
-    const filePath = path.join(publicFolder, fileName);
+    const filePath = path.join(publicFolder, `company${createTicket.companyId}`, fileName)
 
     const mediaSrc = {
       fieldname: 'medias',
@@ -342,7 +339,7 @@ export const forwardMessage = async (
       path: filePath
     } as Express.Multer.File
 
-    await SendWhatsAppMedia({ media: mediaSrc, ticket: createTicket, body, isForwarded: message.fromMe ? false : true });
+    await SendWhatsAppMedia({ media: mediaSrc, ticket: createTicket, body, isForwarded: !message.fromMe });
   }
 
   return res.send();
@@ -352,11 +349,11 @@ export const edit = async (req: Request, res: Response): Promise<Response> => {
   const { messageId } = req.params;
   const { companyId } = req.user;
   const { body }: MessageData = req.body;
-  console.log(body)
+  
   const { ticket , message } = await EditWhatsAppMessage({messageId, body});
 
   const io = getIO();
- io.emit(`company-${companyId}-appMessage`, {
+  io.emit(`company-${companyId}-appMessage`, {
     action:"update",
     message,
     ticket: ticket,

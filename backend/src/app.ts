@@ -5,6 +5,9 @@ import express, { NextFunction, Request, Response } from "express";
 import "express-async-errors";
 import "reflect-metadata";
 import "./bootstrap";
+import helmet from "helmet";
+import rateLimit from "express-rate-limit";
+import { v4 as uuidv4 } from "uuid";
 
 import bodyParser from 'body-parser';
 import uploadConfig from "./config/upload";
@@ -18,20 +21,82 @@ Sentry.init({ dsn: process.env.SENTRY_DSN });
 
 const app = express();
 
+app.set("trust proxy", "loopback");
+
+app.use((req, res, next) => {
+  req.id = uuidv4();
+  next();
+});
+
 app.set("queues", {
   messageQueue,
   sendScheduledMessages
 });
 
-const bodyparser = require('body-parser');
-app.use(bodyParser.json({ limit: '10mb' }));
+app.use(bodyParser.json({
+  limit: '10mb',
+  verify: (req, res, buf) => {
+    req.rawBody = buf;
+  }
+}));
 
-app.use(
-  cors({
-    credentials: true,
-    origin: process.env.FRONTEND_URL
-  })
-);
+app.use(helmet({
+  crossOriginResourcePolicy: { policy: "cross-origin" },
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", "'unsafe-inline'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      imgSrc: ["'self'", "data:", "blob:"],
+      connectSrc: ["'self'", process.env.FRONTEND_URL || "*"]
+    }
+  }
+}));
+
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 100,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: 'Muitas requisições deste IP, tente novamente após 15 minutos',
+  skip: (req) => {
+    return req.ip === '127.0.0.1' || req.ip === '::1';
+  }
+});
+
+app.use('/auth', apiLimiter);
+
+// --- CORREÇÃO DE CORS (WHITELIST BLINDADA) ---
+
+// Remove a barra final do FRONTEND_URL caso exista, para evitar mismatch
+const safeFrontendUrl = process.env.FRONTEND_URL ? process.env.FRONTEND_URL.replace(/\/$/, "") : "";
+
+const whitelist = [
+  safeFrontendUrl,
+  'http://localhost:3000',
+  'http://localhost:3001',
+  'http://127.0.0.1:3000',
+  'http://127.0.0.1:3001',
+  'http://192.168.1.14'
+];
+
+const corsOptions = {
+  credentials: true,
+  origin: function (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) {
+    // Permite requisições sem 'origin' (como Postman ou Apps Mobile)
+    if (!origin) return callback(null, true);
+
+    if (whitelist.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error(`Not allowed by CORS: ${origin}`)); // Adicionado o origin no erro para facilitar debug se falhar
+    }
+  }
+};
+
+app.use(cors(corsOptions));
+// ------------------------------------
+
 app.use(cookieParser());
 app.use(express.json());
 app.use(Sentry.Handlers.requestHandler());

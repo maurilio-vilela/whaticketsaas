@@ -1,12 +1,9 @@
 import { Op, fn, where, col, Filterable, Includeable } from "sequelize";
-import { startOfDay, endOfDay, parseISO } from "date-fns";
-
 import Ticket from "../../models/Ticket";
 import Contact from "../../models/Contact";
 import Message from "../../models/Message";
 import Queue from "../../models/Queue";
 import User from "../../models/User";
-import ShowUserService from "../UserServices/ShowUserService";
 import Tag from "../../models/Tag";
 import TicketTag from "../../models/TicketTag";
 import { intersection } from "lodash";
@@ -42,22 +39,24 @@ const ListTicketsServiceKanban = async ({
   status,
   date,
   updatedAt,
-  showAll,
+  showAll = "true",
   userId,
   withUnreadMessages,
   companyId
 }: Request): Promise<Response> => {
+  
+  // 1. Filtro base: AGORA INCLUI "CLOSED" PARA MOSTRAR VENDAS GANHAS/PERDIDAS
   let whereCondition: Filterable["where"] = {
-    [Op.or]: [{ userId }, { status: "pending" }],
-    queueId: { [Op.or]: [queueIds, null] }
+    queueId: { [Op.or]: [queueIds, null] },
+    companyId,
+    status: { [Op.or]: ["pending", "open", "closed"] } 
   };
-  let includeCondition: Includeable[];
 
-  includeCondition = [
+  let includeCondition: Includeable[] = [
     {
       model: Contact,
       as: "contact",
-      attributes: ["id", "name", "number", "email"]
+      attributes: ["id", "name", "number", "email", "profilePicUrl"]
     },
     {
       model: Queue,
@@ -67,7 +66,7 @@ const ListTicketsServiceKanban = async ({
     {
       model: User,
       as: "user",
-      attributes: ["id", "name"]
+      attributes: ["id", "name", "profileImage"] 
     },
     {
       model: Tag,
@@ -80,15 +79,6 @@ const ListTicketsServiceKanban = async ({
       attributes: ["name"]
     },
   ];
-
-  if (showAll === "true") {
-    whereCondition = { queueId: { [Op.or]: [queueIds, null] } };
-  }
-
-  whereCondition = {
-    ...whereCondition,
-    status: { [Op.or]: ["pending", "open"] }
-  };
 
   if (searchParam) {
     const sanitizedSearchParam = searchParam.toLocaleLowerCase().trim();
@@ -133,38 +123,15 @@ const ListTicketsServiceKanban = async ({
     };
   }
 
-  if (date) {
-    whereCondition = {
-      createdAt: {
-        [Op.between]: [+startOfDay(parseISO(date)), +endOfDay(parseISO(date))]
-      }
-    };
-  }
-
-  if (updatedAt) {
-    whereCondition = {
-      updatedAt: {
-        [Op.between]: [
-          +startOfDay(parseISO(updatedAt)),
-          +endOfDay(parseISO(updatedAt))
-        ]
-      }
-    };
-  }
-
   if (withUnreadMessages === "true") {
-    const user = await ShowUserService(userId);
-    const userQueueIds = user.queues.map(queue => queue.id);
-
     whereCondition = {
-      [Op.or]: [{ userId }, { status: "pending" }],
-      queueId: { [Op.or]: [userQueueIds, null] },
+      ...whereCondition,
       unreadMessages: { [Op.gt]: 0 }
     };
   }
 
   if (Array.isArray(tags) && tags.length > 0) {
-    const ticketsTagFilter: any[] | null = [];
+    const ticketsTagFilter: any[] = [];
     for (let tag of tags) {
       const ticketTags = await TicketTag.findAll({
         where: { tagId: tag }
@@ -173,19 +140,15 @@ const ListTicketsServiceKanban = async ({
         ticketsTagFilter.push(ticketTags.map(t => t.ticketId));
       }
     }
-
     const ticketsIntersection: number[] = intersection(...ticketsTagFilter);
-
     whereCondition = {
       ...whereCondition,
-      id: {
-        [Op.in]: ticketsIntersection
-      }
+      id: { [Op.in]: ticketsIntersection }
     };
   }
 
   if (Array.isArray(users) && users.length > 0) {
-    const ticketsUserFilter: any[] | null = [];
+    const ticketsUserFilter: any[] = [];
     for (let user of users) {
       const ticketUsers = await Ticket.findAll({
         where: { userId: user }
@@ -194,24 +157,18 @@ const ListTicketsServiceKanban = async ({
         ticketsUserFilter.push(ticketUsers.map(t => t.id));
       }
     }
-
     const ticketsIntersection: number[] = intersection(...ticketsUserFilter);
-
     whereCondition = {
       ...whereCondition,
-      id: {
-        [Op.in]: ticketsIntersection
-      }
+      id: { [Op.in]: ticketsIntersection }
     };
   }
 
-  const limit = 40;
+  // === CORREÇÃO FUNDAMENTAL AQUI ===
+  // Se NÃO tiver busca, o limite sobe drasticamente para exibir todo o funil.
+  // Se TIVER busca, mantemos 40 para performance.
+  const limit = searchParam ? 40 : 99999; 
   const offset = limit * (+pageNumber - 1);
-
-  whereCondition = {
-    ...whereCondition,
-    companyId
-  };
 
   const { count, rows: tickets } = await Ticket.findAndCountAll({
     where: whereCondition,
@@ -222,6 +179,7 @@ const ListTicketsServiceKanban = async ({
     order: [["updatedAt", "DESC"]],
     subQuery: false
   });
+
   const hasMore = count > offset + tickets.length;
 
   return {

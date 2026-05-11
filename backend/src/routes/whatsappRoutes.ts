@@ -13,12 +13,14 @@ whatsappRoutes.get("/whatsapp/:whatsappId", isAuth, WhatsAppController.show);
 
 whatsappRoutes.put("/whatsapp/:whatsappId", isAuth, WhatsAppController.update);
 
+whatsappRoutes.delete("/whatsapp/:whatsappId", isAuth, WhatsAppController.remove);
+
+// --- ADICIONE ESTAS LINHAS AQUI ---
+// Rota antiga (global) - Mantenha por compatibilidade se quiser
 whatsappRoutes.post("/whatsapp-restart/", isAuth, WhatsAppController.restart);
 
-whatsappRoutes.delete(
-  "/whatsapp/:whatsappId",
-  isAuth,
-  WhatsAppController.remove
-);
+// NOVA ROTA (Específica por ID) - É ESSA QUE O FRONTEND ESTÁ CHAMANDO
+whatsappRoutes.post("/whatsapp/restart/:whatsappId", isAuth, WhatsAppController.restart);
+// ----------------------------------
 
 export default whatsappRoutes;

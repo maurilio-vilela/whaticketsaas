@@ -225,9 +225,10 @@ return (
               <MenuItem value="signup">Tela de Registro</MenuItem>
               <MenuItem value="login">Tela de Login</MenuItem>
               <MenuItem value="interno">Logotipo Interno</MenuItem>
-			  <MenuItem value="favicon">Favicon.Ico</MenuItem>
-              <MenuItem value="favicon-256x256">Ícone 256x256</MenuItem>
-			  <MenuItem value="apple-touch-icon">Apple Touch Icon</MenuItem>
+	      <MenuItem value="logo_w">Logotipo Dark</MenuItem>
+	      <MenuItem value="favicon">Favicon.Ico</MenuItem>
+              {/*<MenuItem value="favicon-256x256">Ícone 256x256</MenuItem>
+	      <MenuItem value="apple-touch-icon">Apple Touch Icon</MenuItem>*/}
             </Select>
           </FormControl>
         </Grid>

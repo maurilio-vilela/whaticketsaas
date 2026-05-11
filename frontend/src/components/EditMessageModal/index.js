@@ -20,7 +20,7 @@ import whatsBackgroundDark from "../../assets/wa-background-dark.png"
 const useStyles = makeStyles((theme) => ({
   messagesList: {
     backgroundSize: "370px",
-    backgroundImage: theme.mode === 'light' ? `url(${whatsBackground})` : `url(${whatsBackgroundDark})`, //DARK MODE PLW DESIGN//
+    backgroundColor: theme.palette.fancyBackground,
     display: "flex",
     display: "flex",
     justifyContent: "center",
@@ -36,7 +36,10 @@ const useStyles = makeStyles((theme) => ({
   },
   textContentItem: {
     overflowWrap: "break-word",
-    padding: "3px 80px 6px 6px",
+    borderRadius: "16px 0px 16px 16px",
+    padding: "16px",
+    backgroundColor: theme.palette.messageRightBackground,
+    color: "#FFFFFF",
   },
   messageRight: {
     fontSize: "13px",
@@ -54,9 +57,10 @@ const useStyles = makeStyles((theme) => ({
     paddingRight: 5,
     paddingTop: 5,
     paddingBottom: 0
+    
   },
   inputmsg:{
-	  backgroundColor: theme.mode === 'light' ? '#FFF' : '#1c1c1c',
+	  backgroundColor: theme.palette.messageInputWrapperBackground,
 	  display: "flex",
       width: "100%",
       margin: "10px 0px 10px 20px",
@@ -190,13 +194,10 @@ const EditMessageModal = ({ open, onClose, onSave, message }) => {
             <Box
               component="div"
               className={`${classes.messageRight}`}
-              style={{
-                fontStyle: "italic",
-                backgroundColor: "#d9fdd3"
-              }}
             >
+
               <Box className={classes.textContentItem}>
-                <Box component="div" style={{ color:  "#212B36" }}>
+                <Box component="div">
                   <MarkdownWrapper>{message?.body}</MarkdownWrapper>
                 </Box>
                 {/* <span className={classes.timestamp}>
@@ -213,7 +214,8 @@ const EditMessageModal = ({ open, onClose, onSave, message }) => {
               display: "flex",
               alignItems: "center",
               borderRadius: "0px",
-              backgroundColor: "#f0f2f5"
+              // Acessa o tema diretamente aqui
+              backgroundColor: (theme) => theme.palette.messageInputBackground,
             }}
           >
             <Box
@@ -223,7 +225,7 @@ const EditMessageModal = ({ open, onClose, onSave, message }) => {
                 style={{ padding: "15px 0px 15px 15px", flex: 1 }}
                 multiline
                 maxRows={6}
-                placeholder="Search Google Maps"
+                placeholder="Edite sua mensagem..."
                 value={editedMessage}
                 onChange={(e) => setEditedMessage(e.target.value)}
                 inputProps={{ "aria-label": "search google maps" }}

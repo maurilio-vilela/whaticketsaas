@@ -11,16 +11,21 @@ import {
   Default,
   HasMany,
   ForeignKey,
-  BelongsTo
+  BelongsTo,
+  BelongsToMany // IMPORTAR ISSO
 } from "sequelize-typescript";
 import ContactCustomField from "./ContactCustomField";
 import Ticket from "./Ticket";
 import Company from "./Company";
 import Schedule from "./Schedule";
 import Whatsapp from "./Whatsapp";
+import Tag from "./Tag"; // IMPORTAR MODEL TAG
+import ContactTag from "./ContactTag"; // IMPORTAR MODEL PIVÔ
 
 @Table
 class Contact extends Model<Contact> {
+  // ... (outros campos id, name, number, etc.)
+
   @PrimaryKey
   @AutoIncrement
   @Column
@@ -34,6 +39,11 @@ class Contact extends Model<Contact> {
   @Column
   number: string;
 
+  @AllowNull(true)
+  @Default(null)
+  @Column
+  secondaryNumber: string;
+
   @AllowNull(false)
   @Default("")
   @Column
@@ -42,6 +52,10 @@ class Contact extends Model<Contact> {
   @Default("")
   @Column
   profilePicUrl: string;
+
+  @Default("")
+  @Column
+  remoteJid: string;
 
   @Default(false)
   @Column
@@ -59,6 +73,11 @@ class Contact extends Model<Contact> {
   @HasMany(() => ContactCustomField)
   extraInfo: ContactCustomField[];
 
+  // --- ADICIONE ESTA RELAÇÃO ---
+  @BelongsToMany(() => Tag, () => ContactTag)
+  tags: Tag[];
+  // -----------------------------
+
   @Default(true)
   @Column
   active: boolean;
@@ -67,8 +86,45 @@ class Contact extends Model<Contact> {
   @Column
   companyId: number;
 
+  @Default(false)
+  @Column
+  disableBot: boolean
+
   @BelongsTo(() => Company)
   company: Company;
+  
+  // === NOVOS CAMPOS ===
+  @Column
+  gender: string;
+
+  @Default("F")
+  @Column
+  personType: string;
+
+  @Column
+  cpf: string;
+
+  @Column
+  cnpj: string;
+
+  @Column
+  businessName: string;
+
+  @Column
+  birthdayDate: string; // Sequelize trata DATEONLY como string (YYYY-MM-DD)
+
+  @Column
+  state: string;
+
+  @Column
+  city: string;
+
+  @Column
+  address: string;
+
+  @Column
+  reference: string;
+  // ====================
 
   @HasMany(() => Schedule, {
     onUpdate: "CASCADE",

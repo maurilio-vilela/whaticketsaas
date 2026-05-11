@@ -1,0 +1,1261 @@
+import { WASocket, downloadMediaMessage } from "whaileys";
+import axios from 'axios';
+import https from 'https';
+import moment from "moment";
+import Whatsapp from "../models/Whatsapp";
+import { logger } from "../utils/logger";
+
+type Session = WASocket & {
+	id?: number;
+};
+
+const convertBytes = async (bytes: number): Promise<string> => {
+	const sizes = ["Bytes", "KB", "MB", "GB", "TB"];
+	if (bytes === 0) {
+		return "n/a";
+	}
+	const i = parseInt(Math.floor(Math.log(bytes) / Math.log(1024)).toString());
+	if (i === 0) {
+		return bytes + " " + sizes[i];
+	}
+	return (bytes / Math.pow(1024, i)).toFixed(1) + " " + sizes[i];
+};
+
+function convertHMS(value: string | number): string {
+	const sec = parseInt(value.toString(), 10); // convert value to number if it's string
+	let hours: string | number = Math.floor(sec / 3600); // get hours
+	let minutes: string | number = Math.floor((sec - (hours * 3600)) / 60); // get minutes
+	let seconds: string | number = sec - (hours * 3600) - (minutes * 60); // get seconds
+	// add 0 if value < 10; Example: 2 => 02
+	if (hours < 10) { hours = "0" + hours; }
+	if (minutes < 10) { minutes = "0" + minutes; }
+	if (seconds < 10) { seconds = "0" + seconds; }
+	return hours + ':' + minutes + ':' + seconds; // Return is HH:MM:SS
+}
+
+export const whStatus = async (
+	wbot: Session,
+	companyId: number,
+	events: any
+): Promise<any> => {
+	try {
+		//
+		const resWhatsapp = await Whatsapp.findOne({ where: { companyId: companyId } });
+		//
+		const name = resWhatsapp?.name;
+		const token = resWhatsapp?.token.trim();
+		const whStatus = resWhatsapp?.whStatus;
+		const webhook = resWhatsapp?.webhookCli ? resWhatsapp?.webhookCli : null;
+		//
+		const message = events;
+		logger?.warn(`SessionName: ${name}`);
+		//logger?.info(`Messages update: ${JSON.stringify(message, null, 2)}`);
+		// logic of your application...
+		let phone = await wbot?.user?.id.split(":")[0];
+		let onAck = message[0]?.update?.status;
+		//logger?.info(`onAck: ${onAck}`);
+		let status: any;
+		switch (onAck) {
+			case 5:
+				status = 'PLAYED'
+				break;
+			case 4:
+				status = 'READ'
+				break;
+			case 3:
+				status = 'RECEIVED'
+				break;
+			case 2:
+				status = 'SENT'
+				break;
+			case 1:
+				status = 'PENDING'
+				break;
+			case 0:
+				status = 'ERROR'
+				break;
+		}
+		logger?.warn(`Listen to ack ${onAck}, status ${status}`);
+		//
+		let response = {
+			"SessionName": name,
+			"token": token,
+			"wook": 'MESSAGE_STATUS',
+			"status": status,
+			"id": message[0]?.key?.id,
+			"from": message[0]?.key?.fromMe == true ? phone : message[0]?.key?.remoteJid?.split(':')[0].split('@')[0],
+			"to": message[0]?.key?.fromMe == false ? phone : message[0]?.key?.remoteJid?.split(':')[0].split('@')[0],
+			"dateTime": moment(new Date())?.format('YYYY-MM-DD HH:mm:ss')
+		}
+		//
+		if (whStatus && webhook) {
+			//
+			if (response) {
+				let dataJson = JSON.stringify(response, null, 2);
+				await axios.post(webhook, dataJson, {
+					httpsAgent: new https.Agent({
+						rejectUnauthorized: false,
+						keepAlive: true
+					}),
+					headers: {
+						'Content-type': 'application/json; charset=utf-8',
+						'Accept': 'application/json; charset=utf-8'
+					}
+				}).then((response) => {
+					logger?.warn('Webhook status send')
+				}).catch(error => {
+					logger?.error(`Webhook error status send: ${error.message}`);
+				});
+			}
+			//
+		} else {
+			logger?.warn('Webhook status disable');
+		}
+	} catch (error) {
+		logger?.info(error);
+		logger?.error(`Webhook error status: ${error.message}`);
+	};
+}
+
+export const whMessages = async (
+	wbot: Session,
+	companyId: number,
+	events: any
+): Promise<any> => {
+	try {
+		//
+		const resWhatsapp = await Whatsapp.findOne({ where: { companyId: companyId } });
+		//
+		const SessionName = resWhatsapp?.name;
+		const whMessage = resWhatsapp?.whMessage;
+		const webhook = resWhatsapp?.webhookCli ? resWhatsapp?.webhookCli : null;
+		//
+		const m = events;
+		logger?.warn(`SessionName: ${SessionName}`);
+		//
+		const msg = m?.messages[0];
+		//logger?.info(`receiveMessage\n ${JSON.stringify(msg, null, 2)}`);
+		//
+		var type: any;
+		var response:any;
+		//
+		if (msg?.key?.remoteJid != 'status@broadcast') {
+			//
+			logger?.warn(`Type: ${m.type}`);
+			//
+			//if (m.type === 'notify' || m.type === 'append') { }
+			//
+			//
+			if (msg?.message?.locationMessage) {
+				type = 'location';
+			} else if (msg?.message?.liveLocationMessage) {
+				type = 'liveLocation';
+			} else if (msg?.message?.imageMessage) {
+				type = 'image';
+			} else if (msg?.message?.documentMessage) {
+				type = 'document';
+			} else if (msg?.message?.documentWithCaptionMessage) {
+				type = 'documentWithCaptionMessage';
+			} else if (msg?.message?.audioMessage) {
+				type = 'audio';
+			} else if (msg?.message?.contactMessage) {
+				type = 'vcard';
+			} else if (msg?.message?.conversation) {
+				type = 'text';
+			} else if (msg?.message?.extendedTextMessage) {
+				type = 'extended';
+			} else if (msg?.message?.videoMessage) {
+				type = 'video';
+			} else if (msg?.message?.viewOnceMessageV2?.message?.videoMessage) {
+				type = 'videoV2';
+			} else if (msg?.message?.stickerMessage) {
+				type = 'sticker';
+			} else if (msg?.message?.viewOnceMessage?.message?.buttonsMessage) {
+				type = 'button';
+			} else if (msg?.message?.buttonsResponseMessage) {
+				type = 'buttonsResponse';
+			} else if (msg?.message?.templateMessage) {
+				type = 'templateMessage';
+			} else if (msg?.message?.templateButtonReplyMessage) {
+				type = 'templateResponse';
+			} else if (msg?.message?.viewOnceMessage?.message?.listMessage) {
+				type = 'listMessage';
+			} else if (msg?.message?.listResponseMessage) {
+				type = 'listResponseMessage';
+			} else if (msg?.message?.protocolMessage?.historySyncNotification) {
+				type = 'historySync';
+			} else if (msg?.message?.protocolMessage?.initialSecurityNotificationSettingSync) {
+				type = 'initialSecurity';
+			} else if (msg?.message?.interactiveMessage) {
+				type = 'interactiveMessage';
+			} else if (
+				msg?.message?.pollCreationMessage ||
+				msg?.message?.pollCreationMessageV2 ||
+				msg?.message?.pollCreationMessageV3
+			) {
+				type = 'poll';
+			} else if (msg?.message?.pollUpdateMessage) {
+				type = 'pollVote';
+			} else if (msg?.message?.reactionMessage) {
+				type = 'reactionMessage';
+			} else if (msg?.message?.messageContextInfo) {
+				type = 'messageContextInfo';
+			} else if (msg?.message?.editedMessage) {
+				type = 'editedMessage';
+			} else if (msg?.message?.ephemeralMessage) {
+				type = 'ephemeralMessage';
+			} else {
+				//
+				type = undefined;
+				//
+				logger?.error(`Desculpe, estamos sem nenhuma resposta no momento.`);
+				logger?.error(`${JSON.stringify(msg, null, 2)}`);
+				//
+			}
+			//
+			//logger?.error(`${JSON.stringify(msg, null, 2)}`);
+			//
+			logger?.warn(`Type message: ${type}`);
+			let phone = await wbot?.user?.id.split(":")[0];
+			//
+			//
+			switch (type) {
+				case 'text':
+					logger?.info('Message type: text');
+					//
+					response = {
+						"SessionName": `${SessionName}`,
+						"wook": msg?.key?.fromMe == true ? 'SEND_MESSAGE' : 'RECEIVE_MESSAGE',
+						"status": msg?.key?.fromMe == true ? 'SEND' : 'RECEIVED',
+						"type": 'text',
+						"fromMe": msg?.key?.fromMe,
+						"id": msg?.key?.id,
+						"name": msg?.pushName || msg?.verifiedBizName || null,
+						"from": msg?.key?.fromMe == true ? phone : msg?.key?.remoteJid?.split('@')[0],
+						"to": msg?.key?.fromMe == false ? phone : msg?.key?.remoteJid?.split('@')[0],
+						"isPrivate": msg?.key?.remoteJid.endsWith('@s.whatsapp.net'),
+						"isGroup": msg?.key?.remoteJid?.endsWith('@g.us'),
+						"content": msg?.message?.conversation,
+						"participant": (msg?.key?.participant || '').split('@')[0] || null,
+						"datetime": moment(msg?.messageTimestamp * 1000)?.format('YYYY-MM-DD HH:mm:ss')
+					}
+					break;
+				case 'image':
+					logger?.info('Message type: image');
+					//
+					var buffer = await downloadMediaMessage(msg, 'buffer', {});
+					var string64 = buffer.toString('base64');
+					//
+					response = {
+						"SessionName": `${SessionName}`,
+						"wook": msg?.key?.fromMe == true ? 'SEND_MESSAGE' : 'RECEIVE_MESSAGE',
+						"status": msg?.key?.fromMe == true ? 'SEND' : 'RECEIVED',
+						"type": 'image',
+						"fromMe": msg?.key?.fromMe,
+						"id": msg?.key?.id,
+						"name": msg?.pushName || msg?.verifiedBizName || null,
+						"from": msg?.key?.fromMe == true ? phone : msg?.key?.remoteJid?.split('@')[0],
+						"to": msg?.key?.fromMe == false ? phone : msg?.key?.remoteJid?.split('@')[0],
+						"isPrivate": msg?.key?.remoteJid.endsWith('@s.whatsapp.net'),
+						"isGroup": msg?.key?.remoteJid?.endsWith('@g.us'),
+						"caption": msg?.message?.imageMessage?.caption ? msg?.message?.imageMessage?.caption : '',
+						"mimetype": msg?.message?.imageMessage?.mimetype ? msg?.message?.imageMessage?.mimetype : null,
+						"fileLength": msg?.message?.imageMessage?.fileLength ? await convertBytes(msg?.message?.imageMessage?.fileLength) : null,
+						"base64": string64,
+						"height": msg?.message?.imageMessage?.height ? msg?.message?.imageMessage?.height : null,
+						"width": msg?.message?.imageMessage?.width ? msg?.message?.imageMessage?.width : null,
+						"participant": (msg?.key?.participant || '').split('@')[0] || null,
+						"datetime": moment(msg?.messageTimestamp * 1000)?.format('YYYY-MM-DD HH:mm:ss')
+					}
+					//
+					break;
+				case 'sticker':
+					logger?.info('Message type: sticker');
+					//
+					var buffer = await downloadMediaMessage(msg, 'buffer', {});
+					var string64 = buffer.toString('base64');
+					//
+					response = {
+						"SessionName": `${SessionName}`,
+						"wook": msg?.key?.fromMe == true ? 'SEND_MESSAGE' : 'RECEIVE_MESSAGE',
+						"status": msg?.key?.fromMe == true ? 'SEND' : 'RECEIVED',
+						"type": 'image',
+						"fromMe": msg?.key?.fromMe,
+						"id": msg?.key?.id,
+						"name": msg?.pushName || msg?.verifiedBizName || null,
+						"from": msg?.key?.fromMe == true ? phone : msg?.key?.remoteJid?.split('@')[0],
+						"to": msg?.key?.fromMe == false ? phone : msg?.key?.remoteJid?.split('@')[0],
+						"isPrivate": msg?.key?.remoteJid.endsWith('@s.whatsapp.net'),
+						"isGroup": msg?.key?.remoteJid?.endsWith('@g.us'),
+						"caption": msg?.message?.stickerMessage?.caption ? msg?.message?.stickerMessage?.caption : '',
+						"mimetype": msg?.message?.stickerMessage?.mimetype ? msg?.message?.stickerMessage?.mimetype : null,
+						"fileLength": msg?.message?.stickerMessage?.fileLength ? await convertBytes(msg?.message?.stickerMessage?.fileLength) : null,
+						"isAnimated": msg?.message?.stickerMessage?.isAnimated,
+						"base64": string64,
+						"height": msg?.message?.stickerMessage?.height ? msg?.message?.stickerMessage?.height : null,
+						"width": msg?.message?.stickerMessage?.width ? msg?.message?.stickerMessage?.width : null,
+						"participant": (msg?.key?.participant || '').split('@')[0] || null,
+						"datetime": moment(msg?.messageTimestamp * 1000)?.format('YYYY-MM-DD HH:mm:ss')
+					}
+					//
+					break;
+				case 'audio':
+					logger?.info('Message type: audio');
+					//
+					var buffer = await downloadMediaMessage(msg, 'buffer', {});
+					var string64 = buffer.toString('base64');
+					//
+					response = {
+						"SessionName": `${SessionName}`,
+						"wook": msg?.key?.fromMe == true ? 'SEND_MESSAGE' : 'RECEIVE_MESSAGE',
+						"status": msg?.key?.fromMe == true ? 'SEND' : 'RECEIVED',
+						"type": 'audio',
+						"fromMe": msg?.key?.fromMe,
+						"id": msg?.key?.id,
+						"name": msg?.pushName || msg?.verifiedBizName || null,
+						"from": msg?.key?.fromMe == true ? phone : msg?.key?.remoteJid?.split('@')[0],
+						"to": msg?.key?.fromMe == false ? phone : msg?.key?.remoteJid?.split('@')[0],
+						"isPrivate": msg?.key?.remoteJid.endsWith('@s.whatsapp.net'),
+						"isGroup": msg?.key?.remoteJid?.endsWith('@g.us'),
+						"mimetype": msg?.message?.audioMessage?.mimetype ? msg?.message?.audioMessage?.mimetype : null,
+						"fileLength": msg?.message?.audioMessage?.fileLength ? await convertBytes(msg?.message?.audioMessage?.fileLength) : null,
+						"time": convertHMS(msg?.message?.audioMessage?.seconds),
+						"base64": string64,
+						"ptt": msg?.message?.audioMessage?.ptt,
+						"participant": (msg?.key?.participant || '').split('@')[0] || null,
+						"datetime": moment(msg?.messageTimestamp * 1000)?.format('YYYY-MM-DD HH:mm:ss')
+					}
+					//
+					break;
+				case 'video':
+					logger?.info('Message type: video');
+					//
+					var buffer = await downloadMediaMessage(msg, 'buffer', {});
+					var string64 = buffer.toString('base64');
+					//
+					response = {
+						"SessionName": `${SessionName}`,
+						"wook": msg?.key?.fromMe == true ? 'SEND_MESSAGE' : 'RECEIVE_MESSAGE',
+						"status": msg?.key?.fromMe == true ? 'SEND' : 'RECEIVED',
+						"type": 'video',
+						"fromMe": msg?.key?.fromMe,
+						"id": msg?.key?.id,
+						"name": msg?.pushName || msg?.verifiedBizName || null,
+						"from": msg?.key?.fromMe == true ? phone : msg?.key?.remoteJid?.split('@')[0],
+						"to": msg?.key?.fromMe == false ? phone : msg?.key?.remoteJid?.split('@')[0],
+						"isPrivate": msg?.key?.remoteJid.endsWith('@s.whatsapp.net'),
+						"isGroup": msg?.key?.remoteJid?.endsWith('@g.us'),
+						"caption": msg?.message?.videoMessage?.caption ? msg?.message?.videoMessage?.caption : '',
+						"mimetype": msg?.message?.videoMessage?.mimetype ? msg?.message?.videoMessage?.mimetype : null,
+						"fileLength": msg?.message?.videoMessage?.fileLength ? await convertBytes(msg?.message?.videoMessage?.fileLength) : null,
+						"base64": string64,
+						"participant": (msg?.key?.participant || '').split('@')[0] || null,
+						"datetime": moment(msg?.messageTimestamp * 1000)?.format('YYYY-MM-DD HH:mm:ss')
+					}
+					//
+					break;
+				case 'videoV2':
+					logger?.info('Message type: video');
+					//
+					var buffer = await downloadMediaMessage(msg, 'buffer', {});
+					var string64 = buffer.toString('base64');
+					//
+					response = {
+						"SessionName": `${SessionName}`,
+						"wook": msg?.key?.fromMe == true ? 'SEND_MESSAGE' : 'RECEIVE_MESSAGE',
+						"status": msg?.key?.fromMe == true ? 'SEND' : 'RECEIVED',
+						"type": 'video',
+						"fromMe": msg?.key?.fromMe,
+						"id": msg?.key?.id,
+						"name": msg?.pushName || msg?.verifiedBizName || null,
+						"from": msg?.key?.fromMe == true ? phone : msg?.key?.remoteJid?.split('@')[0],
+						"to": msg?.key?.fromMe == false ? phone : msg?.key?.remoteJid?.split('@')[0],
+						"isPrivate": msg?.key?.remoteJid.endsWith('@s.whatsapp.net'),
+						"isGroup": msg?.key?.remoteJid?.endsWith('@g.us'),
+						"caption": msg?.message?.viewOnceMessageV2?.message?.videoMessage?.caption ? msg?.message?.viewOnceMessageV2?.message?.videoMessage?.caption : '',
+						"mimetype": msg?.message?.viewOnceMessageV2?.message?.videoMessage?.mimetype ? msg?.message?.viewOnceMessageV2?.message?.videoMessage?.mimetype : null,
+						"fileLength": msg?.message?.viewOnceMessageV2?.message?.videoMessage?.fileLength ? await convertBytes(msg?.message?.viewOnceMessageV2?.message?.videoMessage?.fileLength) : null,
+						"seconds": msg?.message?.viewOnceMessageV2?.message?.videoMessage?.seconds ? msg?.message?.viewOnceMessageV2?.message?.videoMessage?.seconds : 0,
+						"base64": string64,
+						"participant": (msg?.key?.participant || '').split('@')[0] || null,
+						"datetime": moment(msg?.messageTimestamp * 1000)?.format('YYYY-MM-DD HH:mm:ss')
+					}
+					//
+					break;
+				case 'location':
+					logger?.info('Message type: location');
+					response = {
+						"SessionName": `${SessionName}`,
+						"wook": msg?.key?.fromMe == true ? 'SEND_MESSAGE' : 'RECEIVE_MESSAGE',
+						"status": msg?.key?.fromMe == true ? 'SEND' : 'RECEIVED',
+						"type": 'location',
+						"fromMe": msg?.key?.fromMe,
+						"id": msg?.key?.id,
+						"name": msg?.pushName || msg?.verifiedBizName || null,
+						"from": msg?.key?.fromMe == true ? phone : msg?.key?.remoteJid?.split('@')[0],
+						"to": msg?.key?.fromMe == false ? phone : msg?.key?.remoteJid?.split('@')[0],
+						"isPrivate": msg?.key?.remoteJid.endsWith('@s.whatsapp.net'),
+						"isGroup": msg?.key?.remoteJid?.endsWith('@g.us'),
+						"lat": msg?.message?.locationMessage?.degreesLatitude,
+						"long": msg?.message?.locationMessage?.degreesLongitude,
+						"url": "https://maps.google.com/maps?q=" + msg?.message?.locationMessage?.degreesLatitude + "," + msg?.message?.locationMessage?.degreesLongitude,
+						"participant": (msg?.key?.participant || '').split('@')[0] || null,
+						"datetime": moment(msg?.messageTimestamp * 1000)?.format('YYYY-MM-DD HH:mm:ss')
+					}
+					break;
+				case 'liveLocation':
+					logger?.info('Message type: liveLocation');
+					response = {
+						"SessionName": `${SessionName}`,
+						"wook": msg?.key?.fromMe == true ? 'SEND_MESSAGE' : 'RECEIVE_MESSAGE',
+						"status": msg?.key?.fromMe == true ? 'SEND' : 'RECEIVED',
+						"type": 'liveLocation',
+						"fromMe": msg?.key?.fromMe,
+						"id": msg?.key?.id,
+						"name": msg?.pushName || msg?.verifiedBizName || null,
+						"from": msg?.key?.fromMe == true ? phone : msg?.key?.remoteJid?.split('@')[0],
+						"to": msg?.key?.fromMe == false ? phone : msg?.key?.remoteJid?.split('@')[0],
+						"isPrivate": msg?.key?.remoteJid.endsWith('@s.whatsapp.net'),
+						"isGroup": msg?.key?.remoteJid?.endsWith('@g.us'),
+						"lat": msg?.message?.liveLocationMessage?.degreesLatitude,
+						"long": msg?.message?.liveLocationMessage?.degreesLongitude,
+						"caption": msg?.message?.liveLocationMessage?.caption,
+						"url": "https://maps.google.com/maps?q=" + msg?.message?.liveLocationMessage?.degreesLatitude + "," + msg?.message?.liveLocationMessage?.degreesLongitude,
+						"participant": (msg?.key?.participant || '').split('@')[0] || null,
+						"datetime": moment(msg?.messageTimestamp * 1000)?.format('YYYY-MM-DD HH:mm:ss')
+					}
+					break;
+				case 'document':
+					logger?.info('Message type: document');
+					//
+					var buffer = await downloadMediaMessage(msg, 'buffer', {});
+					var string64 = buffer.toString('base64');
+					//
+					response = {
+						"SessionName": `${SessionName}`,
+						"wook": msg?.key?.fromMe == true ? 'SEND_MESSAGE' : 'RECEIVE_MESSAGE',
+						"status": msg?.key?.fromMe == true ? 'SEND' : 'RECEIVED',
+						"type": 'document',
+						"fromMe": msg?.key?.fromMe,
+						"id": msg?.key?.id,
+						"name": msg?.pushName || msg?.verifiedBizName || null,
+						"from": msg?.key?.fromMe == true ? phone : msg?.key?.remoteJid?.split('@')[0],
+						"to": msg?.key?.fromMe == false ? phone : msg?.key?.remoteJid?.split('@')[0],
+						"isPrivate": msg?.key?.remoteJid.endsWith('@s.whatsapp.net'),
+						"isGroup": msg?.key?.remoteJid?.endsWith('@g.us'),
+						"caption": msg?.message?.documentMessage?.caption ? msg?.message?.documentMessage?.caption : '',
+						"fileName": msg?.message?.documentMessage?.fileName ? msg?.message?.documentMessage?.fileName : null,
+						"mimetype": msg?.message?.documentMessage?.mimetype ? msg?.message?.documentMessage?.mimetype : null,
+						"fileLength": msg?.message?.documentMessage?.fileLength ? await convertBytes(msg?.message?.documentMessage?.fileLength) : null,
+						"base64": string64,
+						"participant": (msg?.key?.participant || '').split('@')[0] || null,
+						"datetime": moment(msg?.messageTimestamp * 1000)?.format('YYYY-MM-DD HH:mm:ss')
+					}
+					//
+					break;
+				case 'documentWithCaptionMessage':
+					logger?.info('Message type: documentWithCaptionMessage');
+					//
+					var buffer = await downloadMediaMessage(msg, 'buffer', {});
+					var string64 = buffer.toString('base64');
+					//
+					response = {
+						"SessionName": `${SessionName}`,
+						"wook": msg?.key?.fromMe == true ? 'SEND_MESSAGE' : 'RECEIVE_MESSAGE',
+						"status": msg?.key?.fromMe == true ? 'SEND' : 'RECEIVED',
+						"type": 'document',
+						"fromMe": msg?.key?.fromMe,
+						"id": msg?.key?.id,
+						"name": msg?.pushName || msg?.verifiedBizName || null,
+						"from": msg?.key?.fromMe == true ? phone : msg?.key?.remoteJid?.split('@')[0],
+						"to": msg?.key?.fromMe == false ? phone : msg?.key?.remoteJid?.split('@')[0],
+						"isPrivate": msg?.key?.remoteJid.endsWith('@s.whatsapp.net'),
+						"isGroup": msg?.key?.remoteJid?.endsWith('@g.us'),
+						"caption": msg?.message?.documentWithCaptionMessage?.message?.documentMessage?.caption ? msg?.message?.documentWithCaptionMessage?.message?.documentMessage?.caption : '',
+						"fileName": msg?.message?.documentWithCaptionMessage?.message?.documentMessage?.fileName ? msg?.message?.documentWithCaptionMessage?.message?.documentMessage?.fileName : null,
+						"mimetype": msg?.message?.documentWithCaptionMessage?.message?.documentMessage?.mimetype ? msg?.message?.documentWithCaptionMessage?.message?.documentMessage?.mimetype : null,
+						"fileLength": msg?.message?.documentWithCaptionMessage?.message?.documentMessage?.fileLength ? await convertBytes(msg?.message?.documentWithCaptionMessage?.message?.documentMessage?.fileLength) : null,
+						"base64": string64,
+						"participant": (msg?.key?.participant || '').split('@')[0] || null,
+						"datetime": moment(msg?.messageTimestamp * 1000)?.format('YYYY-MM-DD HH:mm:ss')
+					}
+					//
+					break;
+				case 'vcard':
+					logger?.info('Message type: vcard');
+					response = {
+						"SessionName": `${SessionName}`,
+						"wook": msg?.key?.fromMe == true ? 'SEND_MESSAGE' : 'RECEIVE_MESSAGE',
+						"status": msg?.key?.fromMe == true ? 'SEND' : 'RECEIVED',
+						"type": 'vcard',
+						"fromMe": msg?.key?.fromMe,
+						"id": msg?.key?.id,
+						"name": msg?.pushName || msg?.verifiedBizName || null,
+						"from": msg?.key?.fromMe == true ? phone : msg?.key?.remoteJid?.split('@')[0],
+						"to": msg?.key?.fromMe == false ? phone : msg?.key?.remoteJid?.split('@')[0],
+						"isPrivate": msg?.key?.remoteJid.endsWith('@s.whatsapp.net'),
+						"isGroup": msg?.key?.remoteJid?.endsWith('@g.us'),
+						"displayName": msg?.message?.contactMessage?.displayName,
+						"vcard": msg?.message?.contactMessage?.vcard,
+						"participant": (msg?.key?.participant || '').split('@')[0] || null,
+						"datetime": moment(msg?.messageTimestamp * 1000)?.format('YYYY-MM-DD HH:mm:ss')
+					}
+					break;
+				case 'button':
+					logger?.info('Message type: button');
+					response = {
+						"SessionName": `${SessionName}`,
+						"wook": msg?.key?.fromMe == true ? 'SEND_MESSAGE' : 'RECEIVE_MESSAGE',
+						"status": msg?.key?.fromMe == true ? 'SEND' : 'RECEIVED',
+						"type": 'button',
+						"fromMe": msg?.key?.fromMe,
+						"id": msg?.key?.id,
+						"name": msg?.pushName || msg?.verifiedBizName || null,
+						"from": msg?.key?.fromMe == true ? phone : msg?.key?.remoteJid?.split('@')[0],
+						"to": msg?.key?.fromMe == false ? phone : msg?.key?.remoteJid?.split('@')[0],
+						"isPrivate": msg?.key?.remoteJid.endsWith('@s.whatsapp.net'),
+						"isGroup": msg?.key?.remoteJid?.endsWith('@g.us'),
+						"buttonsMessage": msg?.message?.viewOnceMessage?.message?.buttonsMessage,
+						"participant": (msg?.key?.participant || '').split('@')[0] || null,
+						"datetime": moment(msg?.messageTimestamp * 1000)?.format('YYYY-MM-DD HH:mm:ss')
+					}
+					break;
+				case 'buttonsResponse':
+					logger?.info('Message type: buttonsResponse');
+					response = {
+						"SessionName": `${SessionName}`,
+						"wook": msg?.key?.fromMe == true ? 'SEND_MESSAGE' : 'RECEIVE_MESSAGE',
+						"status": msg?.key?.fromMe == true ? 'SEND' : 'RECEIVED',
+						"type": 'buttonsResponse',
+						"fromMe": msg?.key?.fromMe,
+						"id": msg?.key?.id,
+						"name": msg?.pushName || msg?.verifiedBizName || null,
+						"from": msg?.key?.fromMe == true ? phone : msg?.key?.remoteJid?.split('@')[0],
+						"to": msg?.key?.fromMe == false ? phone : msg?.key?.remoteJid?.split('@')[0],
+						"selectedButtonId": msg?.message?.buttonsResponseMessage.selectedButtonId,
+						"selectedDisplayText": msg?.message?.buttonsResponseMessage.selectedDisplayText,
+						"participant": (msg?.key?.participant || '').split('@')[0] || null,
+						"datetime": moment(msg?.messageTimestamp * 1000)?.format('YYYY-MM-DD HH:mm:ss')
+					}
+					break;
+				case 'templateMessage':
+					logger?.info('Message type: templateMessage');
+					response = {
+						"SessionName": `${SessionName}`,
+						"wook": msg?.key?.fromMe == true ? 'SEND_MESSAGE' : 'RECEIVE_MESSAGE',
+						"status": msg?.key?.fromMe == true ? 'SEND' : 'RECEIVED',
+						"type": 'templateMessage',
+						"fromMe": msg?.key?.fromMe,
+						"id": msg?.key?.id,
+						"name": msg?.pushName || msg?.verifiedBizName || null,
+						"from": msg?.key?.fromMe == true ? phone : msg?.key?.remoteJid?.split('@')[0],
+						"to": msg?.key?.fromMe == false ? phone : msg?.key?.remoteJid?.split('@')[0],
+						"isPrivate": msg?.key?.remoteJid.endsWith('@s.whatsapp.net'),
+						"isGroup": msg?.key?.remoteJid?.endsWith('@g.us'),
+						"templateMessage": msg?.message?.templateMessage?.hydratedTemplate?.hydratedButtons,
+						"participant": (msg?.key?.participant || '').split('@')[0] || null,
+						"datetime": moment(msg?.messageTimestamp * 1000)?.format('YYYY-MM-DD HH:mm:ss')
+					}
+					break;
+				case 'templateResponse':
+					logger?.info('Message type: templateResponse');
+					response = {
+						"SessionName": `${SessionName}`,
+						"wook": msg?.key?.fromMe == true ? 'SEND_MESSAGE' : 'RECEIVE_MESSAGE',
+						"status": msg?.key?.fromMe == true ? 'SEND' : 'RECEIVED',
+						"type": 'templateResponse',
+						"fromMe": msg?.key?.fromMe,
+						"id": msg?.key?.id,
+						"name": msg?.pushName || msg?.verifiedBizName || null,
+						"from": msg?.key?.fromMe == true ? phone : msg?.key?.remoteJid?.split('@')[0],
+						"to": msg?.key?.fromMe == false ? phone : msg?.key?.remoteJid?.split('@')[0],
+						"isPrivate": msg?.key?.remoteJid.endsWith('@s.whatsapp.net'),
+						"isGroup": msg?.key?.remoteJid?.endsWith('@g.us'),
+						"selectedId": msg?.message?.templateButtonReplyMessage?.selectedId,
+						"selectedDisplayText": msg?.message?.templateButtonReplyMessage?.selectedDisplayText,
+						"participant": (msg?.key?.participant || '').split('@')[0] || null,
+						"datetime": moment(msg?.messageTimestamp * 1000)?.format('YYYY-MM-DD HH:mm:ss')
+					}
+					break;
+				case 'listMessage':
+					logger?.info('Message type: listMessage');
+					response = {
+						"SessionName": `${SessionName}`,
+						"wook": msg?.key?.fromMe == true ? 'SEND_MESSAGE' : 'RECEIVE_MESSAGE',
+						"status": msg?.key?.fromMe == true ? 'SEND' : 'RECEIVED',
+						"type": 'listMessage',
+						"fromMe": msg?.key?.fromMe,
+						"id": msg?.key?.id,
+						"name": msg?.pushName || msg?.verifiedBizName || null,
+						"from": msg?.key?.fromMe == true ? phone : msg?.key?.remoteJid?.split('@')[0],
+						"to": msg?.key?.fromMe == false ? phone : msg?.key?.remoteJid?.split('@')[0],
+						"isPrivate": msg?.key?.remoteJid.endsWith('@s.whatsapp.net'),
+						"isGroup": msg?.key?.remoteJid?.endsWith('@g.us'),
+						"listMessage": msg?.message?.viewOnceMessage?.message?.listMessage,
+						"participant": (msg?.key?.participant || '').split('@')[0] || null,
+						"datetime": moment(msg?.messageTimestamp * 1000)?.format('YYYY-MM-DD HH:mm:ss')
+					}
+					break;
+				case 'listResponseMessage':
+					logger?.info('Message type: listResponseMessage');
+					response = {
+						"SessionName": `${SessionName}`,
+						"wook": msg?.key?.fromMe == true ? 'SEND_MESSAGE' : 'RECEIVE_MESSAGE',
+						"status": msg?.key?.fromMe == true ? 'SEND' : 'RECEIVED',
+						"type": 'listResponseMessage',
+						"fromMe": msg?.key?.fromMe,
+						"id": msg?.key?.id,
+						"name": msg?.pushName || msg?.verifiedBizName || null,
+						"from": msg?.key?.fromMe == true ? phone : msg?.key?.remoteJid?.split('@')[0],
+						"to": msg?.key?.fromMe == false ? phone : msg?.key?.remoteJid?.split('@')[0],
+						"isPrivate": msg?.key?.remoteJid.endsWith('@s.whatsapp.net'),
+						"isGroup": msg?.key?.remoteJid?.endsWith('@g.us'),
+						"listResponseMessage": msg?.message?.listResponseMessage,
+						"participant": (msg?.key?.participant || '').split('@')[0] || null,
+						"datetime": moment(msg?.messageTimestamp * 1000)?.format('YYYY-MM-DD HH:mm:ss')
+					}
+					break;
+				case 'extended':
+					logger?.info('Message type: extended');
+					response = {
+						"SessionName": `${SessionName}`,
+						"wook": msg?.key?.fromMe == true ? 'SEND_MESSAGE' : 'RECEIVE_MESSAGE',
+						"status": msg?.key?.fromMe == true ? 'SEND' : 'RECEIVED',
+						"type": 'extended',
+						"fromMe": msg?.key?.fromMe,
+						"id": msg?.key?.id,
+						"name": msg?.pushName || msg?.verifiedBizName || null,
+						"from": msg?.key?.fromMe == true ? phone : msg?.key?.remoteJid?.split('@')[0],
+						"to": msg?.key?.fromMe == false ? phone : msg?.key?.remoteJid?.split('@')[0],
+						"isPrivate": msg?.key?.remoteJid.endsWith('@s.whatsapp.net'),
+						"isGroup": msg?.key?.remoteJid?.endsWith('@g.us'),
+						"matchedText": msg?.message?.extendedTextMessage?.matchedText,
+						"canonicalUrl": msg?.message?.extendedTextMessage?.canonicalUrl,
+						"description": msg?.message?.extendedTextMessage?.description,
+						"title": msg?.message?.extendedTextMessage?.title,
+						"content": msg?.message?.extendedTextMessage?.text,
+						"quotedMessage": msg?.message?.extendedTextMessage?.contextInfo?.quotedMessage?.conversation,
+						"participant": (msg?.key?.participant || '').split('@')[0] || null,
+						"datetime": moment(msg?.messageTimestamp * 1000)?.format('YYYY-MM-DD HH:mm:ss')
+					}
+					break;
+				case 'historySync':
+					logger?.info('Message type: historySync');
+					//
+					response = {
+						"SessionName": `${SessionName}`,
+						"wook": msg?.key?.fromMe == true ? 'SEND_MESSAGE' : 'RECEIVE_MESSAGE',
+						"status": msg?.key?.fromMe == true ? 'SEND' : 'RECEIVED',
+						"type": 'historySync',
+						"fromMe": msg?.key?.fromMe,
+						"id": msg?.key?.id,
+						"name": msg?.pushName || msg?.verifiedBizName || null,
+						"from": msg?.key?.fromMe == true ? phone : msg?.key?.remoteJid?.split('@')[0],
+						"to": msg?.key?.fromMe == false ? phone : msg?.key?.remoteJid?.split('@')[0],
+						"participant": (msg?.key?.participant || '').split('@')[0] || null,
+						"datetime": moment(msg?.messageTimestamp * 1000)?.format('YYYY-MM-DD HH:mm:ss')
+					}
+					//
+					break;
+				case 'initialSecurity':
+					logger?.info('Message type: initialSecurity');
+					//
+					response = {
+						"SessionName": `${SessionName}`,
+						"wook": msg?.key?.fromMe == true ? 'SEND_MESSAGE' : 'RECEIVE_MESSAGE',
+						"status": msg?.key?.fromMe == true ? 'SEND' : 'RECEIVED',
+						"type": 'initialSecurity',
+						"fromMe": msg?.key?.fromMe,
+						"id": msg?.key?.id,
+						"name": msg?.pushName || msg?.verifiedBizName || null,
+						"from": msg?.key?.fromMe == true ? phone : msg?.key?.remoteJid?.split('@')[0],
+						"to": msg?.key?.fromMe == false ? phone : msg?.key?.remoteJid?.split('@')[0],
+						"participant": (msg?.key?.participant || '').split('@')[0] || null,
+						"datetime": moment(msg?.messageTimestamp * 1000)?.format('YYYY-MM-DD HH:mm:ss')
+					}
+					//
+					break;
+				case 'reactionMessage':
+					logger?.info('Message type: reactionMessage');
+					//
+					response = {
+						"SessionName": `${SessionName}`,
+						"wook": msg?.message?.reactionMessage?.key?.fromMe == true ? 'SEND_MESSAGE' : 'RECEIVE_MESSAGE',
+						"status": msg?.message?.reactionMessage?.key?.fromMe == true ? 'SEND' : 'RECEIVED',
+						"type": 'reactionMessage',
+						"fromMe": msg?.message?.reactionMessage?.key?.fromMe,
+						"id": msg?.message?.reactionMessage?.key?.id,
+						"name": msg?.pushName || msg?.verifiedBizName || null,
+						"from": msg?.message?.reactionMessage?.key?.fromMe == true ? phone : msg?.message?.reactionMessage?.key?.remoteJid?.split('@')[0],
+						"to": msg?.message?.reactionMessage?.key?.fromMe == false ? phone : msg?.message?.reactionMessage?.key?.remoteJid?.split('@')[0],
+						"content": msg?.message?.reactionMessage?.text,
+						"participant": (msg?.key?.participant || '').split('@')[0] || null,
+						"datetime": moment(msg?.message?.reactionMessage?.senderTimestampMs * 1000)?.format('YYYY-MM-DD HH:mm:ss')
+					}
+					//
+					break;
+				case 'interactiveMessage':
+					logger?.info('Message type: interactiveMessage');
+					//
+					response = {
+						"SessionName": `${SessionName}`,
+						"wook": msg?.key?.fromMe == true ? 'SEND_MESSAGE' : 'RECEIVE_MESSAGE',
+						"status": msg?.key?.fromMe == true ? 'SEND' : 'RECEIVED',
+						"type": 'interactiveMessage',
+						"fromMe": msg?.key?.fromMe,
+						"id": msg?.key?.id,
+						"name": msg?.pushName || msg?.verifiedBizName || null,
+						"from": msg?.message?.key?.remoteJid?.split('@')[0],
+						"to": msg?.key?.fromMe == false ? phone : msg?.key?.remoteJid?.split('@')[0],
+						"content": msg?.message?.interactiveMessage?.nativeFlowMessage?.buttons,
+						"participant": (msg?.key?.participant || '').split('@')[0] || null,
+						"datetime": moment(msg?.messageTimestamp * 1000)?.format('YYYY-MM-DD HH:mm:ss')
+					}
+					//
+					break;
+				case 'poll':
+					logger?.info('Message type: poll');
+					//
+					response = {
+						"SessionName": `${SessionName}`,
+						"wook": msg?.key?.fromMe == true ? 'SEND_MESSAGE' : 'RECEIVE_MESSAGE',
+						"status": msg?.key?.fromMe == true ? 'SEND' : 'RECEIVED',
+						"type": 'poll',
+						"fromMe": msg?.key?.fromMe,
+						"id": msg?.key?.id,
+						"name": msg?.pushName || msg?.verifiedBizName || null,
+						"from": msg?.key?.fromMe == true ? phone : msg?.key?.remoteJid?.split('@')[0],
+						"to": msg?.key?.fromMe == false ? phone : msg?.key?.remoteJid?.split('@')[0],
+						"isPrivate": msg?.key?.remoteJid.endsWith('@s.whatsapp.net'),
+						"isGroup": msg?.key?.remoteJid?.endsWith('@g.us'),
+						"poll": msg?.message?.pollCreationMessage,
+						"participant": (msg?.key?.participant || '').split('@')[0] || null,
+						"datetime": moment(msg?.messageTimestamp * 1000)?.format('YYYY-MM-DD HH:mm:ss')
+					}
+					//
+					break;
+				case 'pollVote':
+					logger?.info('Message type: pollVote');
+					//
+					response = {
+						"SessionName": `${SessionName}`,
+						"wook": msg?.key?.fromMe == true ? 'SEND_MESSAGE' : 'RECEIVE_MESSAGE',
+						"status": msg?.key?.fromMe == true ? 'SEND' : 'RECEIVED',
+						"type": 'pollVote',
+						"fromMe": msg?.key?.fromMe,
+						"id": msg?.key?.id,
+						"name": msg?.pushName || msg?.verifiedBizName || null,
+						"from": msg?.key?.fromMe == true ? phone : msg?.key?.remoteJid?.split('@')[0],
+						"to": msg?.key?.fromMe == false ? phone : msg?.key?.remoteJid?.split('@')[0],
+						"isPrivate": msg?.key?.remoteJid.endsWith('@s.whatsapp.net'),
+						"isGroup": msg?.key?.remoteJid?.endsWith('@g.us'),
+						// Específico de enquetes (poll vote)
+						"pollMessageId": msg?.message?.pollUpdateMessage?.pollCreationMessageKey?.id || null,
+						"pollCreationMessageKey": msg?.message?.pollUpdateMessage?.pollCreationMessageKey || null,
+						"senderTimestampMs": msg?.message?.pollUpdateMessage?.senderTimestampMs || null,
+						"voteEncrypted": true,
+						"vote": {
+							"encPayload": msg?.message?.pollUpdateMessage?.vote?.encPayload || null,
+							"encIv": msg?.message?.pollUpdateMessage?.vote?.encIv || null,
+						},
+						"participant": (msg?.key?.participant || '').split('@')[0] || null,
+						"datetime": moment(msg?.messageTimestamp * 1000)?.format('YYYY-MM-DD HH:mm:ss')
+					};
+					//
+					break;
+				case 'editedMessage':
+					//
+					response = {
+						"SessionName": `${SessionName}`,
+						"wook": msg?.key?.fromMe == true ? 'SEND_MESSAGE' : 'RECEIVE_MESSAGE',
+						"status": msg?.key?.fromMe == true ? 'SEND' : 'RECEIVED',
+						"type": 'editedMessage',
+						"fromMe": msg?.key?.fromMe,
+						"id": msg?.key?.id,
+						"name": msg?.pushName || msg?.verifiedBizName || null,
+						"from": msg?.key?.fromMe == true ? phone : msg?.key?.remoteJid?.split('@')[0],
+						"to": msg?.key?.fromMe == false ? phone : msg?.key?.remoteJid?.split('@')[0],
+						"isPrivate": msg?.key?.remoteJid.endsWith('@s.whatsapp.net'),
+						"isGroup": msg?.key?.remoteJid?.endsWith('@g.us'),
+						"content": msg.message.editedMessage?.message?.protocolMessage?.editedMessage?.conversation || null,
+						"originalMessageId": msg.message.editedMessage?.message?.protocolMessage?.key?.id || null,
+						"participant": (msg?.key?.participant || '').split('@')[0] || null,
+						"datetime": moment(msg?.messageTimestamp * 1000)?.format('YYYY-MM-DD HH:mm:ss')
+					};
+					//
+					break;
+				case 'ephemeralMessage':
+					logger?.info('Message type: ephemeralMessage');
+					//
+					response = {
+						"SessionName": `${SessionName}`,
+						"wook": msg?.key?.fromMe == true ? 'SEND_MESSAGE' : 'RECEIVE_MESSAGE',
+						"status": msg?.key?.fromMe == true ? 'SEND' : 'RECEIVED',
+						"type": 'ephemeralMessage',
+						"fromMe": msg?.key?.fromMe,
+						"id": msg?.key?.id,
+						"name": msg?.pushName || msg?.verifiedBizName || null,
+						"from": msg?.key?.fromMe == true ? phone : msg?.key?.remoteJid?.split('@')[0],
+						"to": msg?.key?.fromMe == false ? phone : msg?.key?.remoteJid?.split('@')[0],
+						"isPrivate": msg?.key?.remoteJid.endsWith('@s.whatsapp.net'),
+						"isGroup": msg?.key?.remoteJid?.endsWith('@g.us'),
+						"content": msg?.message?.ephemeralMessage?.message?.extendedTextMessage?.text || null,
+						"expiration": moment(msg?.message?.ephemeralMessage?.message?.extendedTextMessage?.contextInfo?.expiration * 1000)?.format('YYYY-MM-DD HH:mm:ss'),
+						"ephemeralSetting": moment(msg?.message?.ephemeralMessage?.message?.extendedTextMessage?.contextInfo?.ephemeralSettingTimestamp * 1000)?.format('YYYY-MM-DD HH:mm:ss'),
+						"participant": (msg?.key?.participant || '').split('@')[0] || null,
+						"datetime": moment(msg?.messageTimestamp * 1000)?.format('YYYY-MM-DD HH:mm:ss')
+					}
+					break;
+				default:
+					//
+					response = {};
+				//
+			}
+
+			if (whMessage && webhook) {
+				//
+				if (Object.keys(response).length !== 0) {
+					let dataJson = JSON.stringify(response, null, 2);
+					await axios.post(webhook, dataJson, {
+						httpsAgent: new https.Agent({
+							rejectUnauthorized: false,
+							keepAlive: true
+						}),
+						headers: {
+							'Content-type': 'application/json; charset=utf-8',
+							'Accept': 'application/json; charset=utf-8'
+						}
+					}).then(response => {
+						logger?.warn('Webhook message send')
+					}).catch(error => {
+						logger?.error(`Webhook error message send: ${error.message}`);
+					});
+				}
+				//
+			} else {
+				logger?.warn('Webhook message disable');
+			}
+		}
+	} catch (error) {
+		logger?.error(`Webhook error message: ${error.message}`);
+	};
+};
+
+export const whConnect = async (
+	whatsapp: Whatsapp,
+	lastDisconnect: any
+): Promise<any> => {
+	try {
+		//
+		const resWhatsapp = await Whatsapp.findOne({ where: { id: whatsapp.id } });
+		//
+		const name = resWhatsapp?.name;
+		const whConnect = resWhatsapp?.whConnect;
+		const webhook = resWhatsapp?.webhookCli ? resWhatsapp?.webhookCli : null;
+		//
+		const resDisconnectReason = {
+			loggedOpen: 'loggedOpen', // Manual
+			loggedQr: 'loggedQr', // Manual
+			genericOut: 400,
+			loggedOut: 401, // Desconectado de outro dispositivo
+			bannedTimetamp: 402, // O código de status 402 possui um timestamp de banimento, conta temporariamente banida
+			bannedTemporary: 403, // Agora chamado de LOCKED no código do WhatsApp Web, conta banida, dispositivo principal foi desconectado
+			clientOutdated: 405, // Cliente desatualizado
+			unknownLogout: 406, // Agora chamado de BANNED no código do WhatsApp Web, desconectado por motivo desconhecido
+			timedOut: 408, // Conexão expirada, reconectando...
+			connectionLost: 408, // Conexão perdida com o servidor, reconectando...
+			dadUserAgent: 409, // O agente do usuário do cliente foi rejeitado
+			multideviceMismatch: 411, // Incompatibilidade de múltiplos dispositivos, escaneie novamente...
+			CATExpired: 413, // O token de autenticação criptográfica do Messenger expirou
+			CATInvalid: 414, // O token de autenticação criptográfica do Messenger é inválido
+			notFound: 415,
+			connectionClosed: 428, // Conexão fechada, reconectando...
+			connectionReplaced: 440, // Conexão substituída, outra nova sessão foi aberta e reconectada...
+			badSession: 500, // Arquivo de sessão corrompido, exclua a sessão e escaneie novamente.
+			experimental: 501,
+			serviceUnavailable: 503,
+			restartRequired: 515,
+		};
+		//
+		const	statusCode = lastDisconnect;
+		var response:any;
+		//
+		switch (statusCode) {
+			case resDisconnectReason.loggedOpen:
+				// Device Logged Out, Deleting Session
+				logger?.info(`SessionName: ${name}`);
+				logger?.info(`Connection loggedOpen`);
+				//
+				response = {
+					SessionName: name,
+					wook: "STATUS_CONNECT",
+					state: "CONNECTED",
+					status: "inChat",
+					message: "Sistema iniciado e disponivel para uso"
+				};
+				//
+				break;
+			case resDisconnectReason.loggedQr:
+				// Device Logged Out, Deleting Session
+				logger?.info(`SessionName: ${name}`);
+				logger?.info(`Connection loggedQr`);
+				//
+				response = {
+					SessionName: name,
+					wook: "STATUS_CONNECT",
+					state: "QRCODE",
+					status: "qrRead",
+					message: "Sistema aguardando leitura do QR-Code"
+				};
+				//
+				break;
+			case resDisconnectReason.loggedOut:
+				// Device Logged Out, Deleting Session
+				logger?.info(`SessionName: ${name}`);
+				logger?.info(`Connection loggedOut`);
+				//
+				response = {
+					SessionName: name,
+					wook: "STATUS_CONNECT",
+					state: "CLOSED",
+					status: "notLogged",
+					message: "Sistema desconectado"
+				};
+				//
+				break;
+			case resDisconnectReason.bannedTemporary:
+				//
+				logger?.info(`SessionName: ${name}`);
+				logger?.info(`User banned temporary`);
+				//
+				response = {
+					SessionName: name,
+					wook: "STATUS_CONNECT",
+					state: "BANNED",
+					status: "notLogged",
+					message: "Sistema desconectado"
+				};
+				//
+				break;
+			case resDisconnectReason.bannedTimetamp:
+				//
+				logger?.info(`SessionName: ${name}`);
+				logger?.info(`User banned timestamp`);
+				//
+				response = {
+					SessionName: name,
+					wook: "STATUS_CONNECT",
+					state: "BANNED",
+					status: "notLogged",
+					message: "Sistema desconectado"
+				};
+				//
+				break;
+			case resDisconnectReason.timedOut:
+				//
+				logger?.info(`SessionName: ${name}`);
+				logger?.info(`Connection TimedOut`);
+				//
+				response = {
+					SessionName: name,
+					wook: "STATUS_CONNECT",
+					state: "CONNECTING",
+					status: "desconnectedMobile",
+					message: "Dispositivo conectando"
+				};
+				//
+				break;
+			case resDisconnectReason.connectionLost:
+				//
+				logger?.info(`SessionName: ${name}`);
+				logger?.info(`Connection Los`);
+				//
+				response = {
+					SessionName: name,
+					wook: "STATUS_CONNECT",
+					message: "Dispositivo conectando",
+					state: "CONNECTING",
+					status: "desconnectedMobile"
+				};
+				//
+				break;
+			case resDisconnectReason.multideviceMismatch:
+				//
+				logger?.info(`SessionName: ${name}`);
+				logger?.info('Connection multideviceMismatch');
+				//
+				response = {
+					SessionName: name,
+					wook: "STATUS_CONNECT",
+					message: "Dispositivo conectando",
+					state: "CONNECTING",
+					status: "desconnectedMobile"
+				};
+				//
+				break;
+			case resDisconnectReason.connectionClosed:
+				//
+				logger?.info(`SessionName: ${name}`);
+				logger?.info(`Connection connectionClosed`);
+				//
+				response = {
+					SessionName: name,
+					wook: "STATUS_CONNECT",
+					message: "Sistema desconectado",
+					state: "CLOSED",
+					status: "notLogged"
+				};
+				//
+				break;
+			case resDisconnectReason.connectionReplaced:
+				//
+				// Connection Replaced, Another New Session Opened, Please Close Current Session First
+				logger?.info(`SessionName: ${name}`);
+				logger?.info(`Connection connectionReplaced`);
+				//
+				response = {
+					SessionName: name,
+					wook: "STATUS_CONNECT",
+					state: "DISCONNECTED",
+					status: "notLogged",
+					message: "Dispositivo desconectado"
+				};
+				//
+				break;
+			case resDisconnectReason.badSession:
+				//
+				// Bad session file, delete and run again
+				logger?.info(`SessionName: ${name}`);
+				logger?.info(`Connection badSession`);
+				//
+				response = {
+					SessionName: name,
+					wook: "STATUS_CONNECT",
+					state: "DISCONNECTED",
+					status: "notLogged",
+					message: "Dispositivo desconectado"
+				};
+				//
+				break;
+			case resDisconnectReason.restartRequired:
+				//
+				logger?.info(`SessionName: ${name}`);
+				logger?.info('Connection restartRequired');
+				//
+				response = {
+					SessionName: name,
+					wook: "STATUS_CONNECT",
+					message: "Sistema desconectado",
+					state: "CLOSED",
+					status: "notLogged"
+				};
+				//
+				break;
+			case resDisconnectReason.genericOut:
+				//
+				logger?.info(`SessionName: ${name}`);
+				logger?.info('Generic Error');
+				//
+				response = {
+					SessionName: name,
+					wook: "STATUS_CONNECT",
+					state: "ERROR",
+					status: "genericError",
+					message: "Erro genérico"
+				};
+				//
+				break;
+			case resDisconnectReason.clientOutdated:
+				//
+				logger?.info(`SessionName: ${name}`);
+				logger?.info('Client Outdated');
+				//
+				response = {
+					SessionName: name,
+					wook: "STATUS_CONNECT",
+					state: "OUTDATED",
+					status: "updateRequired",
+					message: "Cliente desatualizado, atualização necessária"
+				};
+				//
+				break;
+			case resDisconnectReason.unknownLogout:
+				//
+				logger?.info(`SessionName: ${name}`);
+				logger?.info('Unknown Logout Reason');
+				//
+				response = {
+					SessionName: name,
+					wook: "STATUS_CONNECT",
+					state: "CLOSED",
+					status: "notLogged",
+					message: "Logout desconhecido"
+				};
+				//
+				break;
+			case resDisconnectReason.dadUserAgent:
+				//
+				logger?.info(`SessionName: ${name}`);
+				logger?.info('Bad User Agent');
+				//
+				response = {
+					SessionName: name,
+					wook: "STATUS_CONNECT",
+					state: "ERROR",
+					status: "invalidUserAgent",
+					message: "User Agent inválido"
+				};
+				//
+				break;
+			case resDisconnectReason.CATExpired:
+				//
+				logger?.info(`SessionName: ${name}`);
+				logger?.info('Crypto Auth Token Expired');
+				//
+				response = {
+					SessionName: name,
+					wook: "STATUS_CONNECT",
+					state: "AUTH_FAILED",
+					status: "tokenExpired",
+					message: "Token de autenticação criptografada expirado"
+				};
+				//
+				break;
+			case resDisconnectReason.CATInvalid:
+				//
+				logger?.info(`SessionName: ${name}`);
+				logger?.info('Invalid Crypto Auth Token');
+				//
+				response = {
+					SessionName: name,
+					wook: "STATUS_CONNECT",
+					state: "AUTH_FAILED",
+					status: "invalidToken",
+					message: "Token de autenticação criptografada inválido"
+				};
+				//
+				break;
+			case resDisconnectReason.notFound:
+				//
+				logger?.info(`SessionName: ${name}`);
+				logger?.info('Resource Not Found');
+				//
+				response = {
+					SessionName: name,
+					wook: "STATUS_CONNECT",
+					state: "ERROR",
+					status: "resourceNotFound",
+					message: "Recurso não encontrado"
+				};
+				//
+				break;
+			case resDisconnectReason.experimental:
+				//
+				logger?.info(`SessionName: ${name}`);
+				logger?.info('Experimental Feature Issue');
+				//
+				response = {
+					SessionName: name,
+					wook: "STATUS_CONNECT",
+					state: "ERROR",
+					status: "experimental",
+					message: "Problema de Recurso Experimental"
+				};
+				//
+				break;
+			case resDisconnectReason.serviceUnavailable:
+				//
+				logger?.info(`SessionName: ${name}`);
+				logger?.info('Service Unavailable');
+				//
+				response = {
+					SessionName: name,
+					wook: "STATUS_CONNECT",
+					state: "ERROR",
+					status: "serviceUnavailable",
+					message: "Serviço Indisponível"
+				};
+				//
+				break;
+			default:
+				//
+				//logger?.warn(`lastDisconnect: ${lastDisconnect?.error}`);
+				//
+				response = {};
+			//
+		}
+		//
+		if (whConnect && webhook) {
+			//
+			if (Object.keys(response).length !== 0) {
+				let dataJson = JSON.stringify(response, null, 2);
+				await axios.post(webhook, dataJson, {
+					httpsAgent: new https.Agent({
+						rejectUnauthorized: false,
+						keepAlive: true
+					}),
+					headers: {
+						'Content-type': 'application/json; charset=utf-8',
+						'Accept': 'application/json; charset=utf-8'
+					}
+				}).then(response => {
+					logger?.warn('Webhook connect send')
+				}).catch(error => {
+					logger?.error(`Webhook error connect send: ${error.message}`);
+				});
+			}
+			//
+		} else {
+			logger?.warn('Webhook connect disable');
+		}
+	} catch (error) {
+		logger?.error(`Webhook error connect: ${error.message}`);
+	};
+};
+
+export const whQrcode = async (
+	whatsapp: Whatsapp,
+	qrcode: string
+): Promise<any> => {
+	try {
+		//
+		const resWhatsapp = await Whatsapp.findOne({ where: { id: whatsapp.id } });
+		//
+		const name = resWhatsapp?.name;
+		const whQrcode = resWhatsapp?.whQrcode;
+		const webhook = resWhatsapp?.webhookCli ? resWhatsapp?.webhookCli : null;
+		//
+		let response = {
+			"SessionName": name,
+			"state": "QRCODE",
+			"status": "qrRead",
+			"qrcode": qrcode
+		}
+		//
+		if (whQrcode && webhook) {
+			//
+			if (Object.keys(response).length !== 0) {
+				let dataJson = JSON.stringify(response, null, 2);
+				await axios.post(webhook, dataJson, {
+					httpsAgent: new https.Agent({
+						rejectUnauthorized: false,
+						keepAlive: true
+					}),
+					headers: {
+						'Content-type': 'application/json; charset=utf-8',
+						'Accept': 'application/json; charset=utf-8'
+					}
+				}).then(response => {
+					logger?.warn('Webhook qrcode send')
+				}).catch(error => {
+					logger?.error(`Webhook error qrcode send: ${error.message}`);
+				});
+			}
+			//
+		} else {
+			logger?.warn('Webhook qrcode disable');
+		}
+	} catch (error) {
+		logger?.error(`Webhook error qrcode: ${error.message}`);
+	};
+};

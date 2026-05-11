@@ -32,6 +32,11 @@ import promptRoutes from "./promptRouter";
 import queueIntegrationRoutes from "./queueIntegrationRoutes";
 import forgotsRoutes from "./forgotPasswordRoutes";
 import versionRouter from "./versionRoutes";
+import reportsRoutes from "./reportsRoutes";
+import taskRoutes from "./taskRoutes"; // Adicionado
+import dealRoutes from "./dealRoutes";
+
+
 const routes = Router();
 
 routes.use(userRoutes);
@@ -40,7 +45,6 @@ routes.use(settingRoutes);
 routes.use(contactRoutes);
 routes.use(ticketRoutes);
 routes.use(whatsappRoutes);
-routes.use(messageRoutes);
 routes.use(messageRoutes);
 routes.use(whatsappSessionRoutes);
 routes.use(queueRoutes);
@@ -66,6 +70,9 @@ routes.use(filesRoutes);
 routes.use(promptRoutes);
 routes.use(queueIntegrationRoutes);
 routes.use(forgotsRoutes);
+routes.use(reportsRoutes);
 routes.use(versionRouter);
+routes.use(taskRoutes); // Adicionado
+routes.use(dealRoutes);
 
 export default routes;

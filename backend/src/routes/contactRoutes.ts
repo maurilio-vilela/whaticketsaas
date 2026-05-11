@@ -28,6 +28,8 @@ contactRoutes.get("/contacts", isAuth, ContactController.index);
 
 contactRoutes.get("/contacts/list", isAuth, ContactController.list);
 
+contactRoutes.get("/contacts/dashboard", isAuth, ContactController.getDashboard);
+
 contactRoutes.get("/contacts/:contactId", isAuth, ContactController.show);
 
 contactRoutes.post("/contacts", isAuth, ContactController.store);
@@ -37,5 +39,10 @@ contactRoutes.put("/contacts/:contactId", isAuth, ContactController.update);
 contactRoutes.delete("/contacts/:contactId", isAuth, ContactController.remove);
 
 contactRoutes.get("/contact", isAuth, ContactController.getContactVcard);
+
+contactRoutes.post("/contacts/merge", isAuth, ContactController.merge);
+
+contactRoutes.get("/contacts/:contactId/media", isAuth, ContactController.listMedia);
+
 
 export default contactRoutes;

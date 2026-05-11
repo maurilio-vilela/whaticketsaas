@@ -1,29 +1,35 @@
-import { WAMessage, AnyMessageContent } from "@whiskeysockets/baileys";
+import { AnyMessageContent } from "whaileys";
 import * as Sentry from "@sentry/node";
 import fs from "fs";
 import { exec } from "child_process";
 import path from "path";
-import ffmpegPath from "@ffmpeg-installer/ffmpeg";
+import ffmpeg from "fluent-ffmpeg";
 import AppError from "../../errors/AppError";
 import GetTicketWbot from "../../helpers/GetTicketWbot";
 import Ticket from "../../models/Ticket";
 import mime from "mime-types";
+
+import ffmpegPath from "@ffmpeg-installer/ffmpeg";
 import formatBody from "../../helpers/Mustache";
+import { logger } from "../../utils/logger";
 
 interface Request {
   media: Express.Multer.File;
   ticket: Ticket;
+  companyId?: number;
   body?: string;
-  isForwarded?: boolean;  
+  isForwarded?: boolean;
 }
+
+ffmpeg.setFfmpegPath(ffmpegPath.path);
 
 const publicFolder = path.resolve(__dirname, "..", "..", "..", "public");
 
-const processAudio = async (audio: string): Promise<string> => {
-  const outputAudio = `${publicFolder}/${new Date().getTime()}.mp3`;
+const processAudio = async (audio: string, companyId: string): Promise<string> => {
+  const outputAudio = `${publicFolder}/company${companyId}/${new Date().getTime()}.ogg`;
   return new Promise((resolve, reject) => {
     exec(
-      `${ffmpegPath.path} -i ${audio} -vn -ab 128k -ar 44100 -f ipod ${outputAudio} -y`,
+      `${ffmpegPath.path} -i ${audio} -vn -c:a libopus -b:a 128k ${outputAudio} -y`,
       (error, _stdout, _stderr) => {
         if (error) reject(error);
         fs.unlinkSync(audio);
@@ -33,8 +39,8 @@ const processAudio = async (audio: string): Promise<string> => {
   });
 };
 
-const processAudioFile = async (audio: string): Promise<string> => {
-  const outputAudio = `${publicFolder}/${new Date().getTime()}.mp3`;
+const processAudioFile = async (audio: string, companyId: string): Promise<string> => {
+  const outputAudio = `${publicFolder}/company${companyId}/${new Date().getTime()}.mp3`;
   return new Promise((resolve, reject) => {
     exec(
       `${ffmpegPath.path} -i ${audio} -vn -ar 44100 -ac 2 -b:a 192k ${outputAudio}`,
@@ -50,7 +56,8 @@ const processAudioFile = async (audio: string): Promise<string> => {
 export const getMessageOptions = async (
   fileName: string,
   pathMedia: string,
-  body?: string
+  companyId?: string,
+  body: string = " "
 ): Promise<any> => {
   const mimeType = mime.lookup(pathMedia);
   const typeMessage = mimeType.split("/")[0];
@@ -64,29 +71,27 @@ export const getMessageOptions = async (
     if (typeMessage === "video") {
       options = {
         video: fs.readFileSync(pathMedia),
-        caption: body ? body : '',
+        caption: body ? body : null,
         fileName: fileName
-        // gifPlayback: true
       };
     } else if (typeMessage === "audio") {
-      const typeAudio = true; //fileName.includes("audio-record-site");
-      const convert = await processAudio(pathMedia);
-      if (typeAudio) {
+      // Verifica se o arquivo já é OGG
+      if (mimeType === "audio/ogg") {
         options = {
-          audio: fs.readFileSync(convert),
-          mimetype: typeAudio ? "audio/mp4" : mimeType,
-          caption: body ? body : null,
-          ptt: true
+          audio: fs.readFileSync(pathMedia),
+          mimetype: "audio/ogg; codecs=opus",
+          ptt: true,
         };
       } else {
+        // Converte para OGG se não for
+        const convert = await processAudio(pathMedia, companyId);
         options = {
           audio: fs.readFileSync(convert),
-          mimetype: typeAudio ? "audio/mp4" : mimeType,
-          caption: body ? body : null,
+          mimetype: "audio/ogg; codecs=opus",
           ptt: true
         };
       }
-    } else if (typeMessage === "document") {
+    } else if (typeMessage === "document" || fileName.endsWith('.psd')) {
       options = {
         document: fs.readFileSync(pathMedia),
         caption: body ? body : null,
@@ -103,7 +108,7 @@ export const getMessageOptions = async (
     } else {
       options = {
         image: fs.readFileSync(pathMedia),
-        caption: body ? body : null
+        caption: body ? body : null,
       };
     }
 
@@ -120,73 +125,126 @@ const SendWhatsAppMedia = async ({
   ticket,
   body,
   isForwarded = false
-}: Request): Promise<WAMessage> => {
+}: Request): Promise<any> => {
   try {
     const wbot = await GetTicketWbot(ticket);
+    const number = `${ticket.contact.number}@${ticket.isGroup ? "g.us" : "s.whatsapp.net"}`;
+
+    // =================================================================
+    // CORREÇÃO: PROACTIVE-HEALING COM DELAY PARA MÍDIA
+    // =================================================================
+    try {
+      // Verifica se o JID é conhecido e se tem um LID associado
+      const jidInfo = await wbot.onWhatsApp(number);
+      if (jidInfo?.length && (jidInfo[0] as any).lid) {
+        logger.warn(`[Proactive-Healing] Contato LID detectado (${number}). Forçando verificação de sessão antes de enviar mídia.`);
+        
+        // Força o Baileys a checar e revalidar as chaves de sessão
+        await wbot.assertSessions([number], true);
+        
+        // ADICIONADO: Delay de 1 segundo para garantir que a sessão seja salva no disco
+        // antes de iniciar o processo pesado de upload de mídia.
+        await new Promise(r => setTimeout(r, 1000));
+
+        logger.warn(`[Proactive-Healing] Verificação de sessão concluída para ${number}.`);
+      }
+    } catch (err) {
+      logger.error(err, `[Proactive-Healing] Falha ao verificar/forçar sessão para ${number}. A mídia pode falhar.`);
+    }
+    // =================================================================
+    // FIM DA CORREÇÃO
+    // =================================================================
+
+    const companyId = ticket.companyId.toString();
 
     const pathMedia = media.path;
-    const typeMessage = media.mimetype.split("/")[0];
+    const mimeType = media.mimetype;
+    const typeMessage = mimeType.split("/")[0];
+    const fileName = media.originalname.replace('/', '-');
     let options: AnyMessageContent;
-    const bodyMessage = formatBody(body, ticket.contact)
+    const bodyMessage = formatBody(body, ticket.contact);
 
-    if (typeMessage === "video") {
+    // Lista de tipos MIME de vídeo comuns
+    const videoMimeTypes = [
+      'video/mp4',
+      'video/3gpp',
+      'video/quicktime',
+      'video/x-msvideo',
+      'video/x-ms-wmv',
+      'video/x-matroska',
+      'video/webm',
+      'video/ogg'
+    ];
+
+    // Lista de extensões que devem ser tratadas como documento
+    const documentExtensions = ['.psd', '.ai', '.eps', '.indd', '.xd', '.sketch'];
+
+    // Verifica se é um arquivo PSD ou similar (deve ser tratado como documento)
+    const shouldBeDocument = documentExtensions.some(ext => fileName.toLowerCase().endsWith(ext));
+
+    if (shouldBeDocument) {
+      options = {
+        document: fs.readFileSync(pathMedia),
+        caption: bodyMessage,
+        fileName: fileName,
+        mimetype: mimeType
+      };
+    }
+    // Verifica se é um vídeo (incluindo vários formatos)
+    else if (typeMessage === "video" || videoMimeTypes.includes(mimeType)) {
       options = {
         video: fs.readFileSync(pathMedia),
         caption: bodyMessage,
-        fileName: media.originalname,
-        contextInfo: { forwardingScore: isForwarded ? 2 : 0, isForwarded: isForwarded }
-        // gifPlayback: true
+        fileName: fileName,
+        mimetype: mimeType
       };
     } else if (typeMessage === "audio") {
-      const typeAudio = media.originalname.includes("audio-record-site");
-      if (typeAudio) {
-        const convert = await processAudio(media.path);
+      // Verifica se o arquivo já é OGG
+      if (mimeType === "audio/ogg") {
         options = {
-          audio: fs.readFileSync(convert),
-          mimetype: typeAudio ? "audio/mp4" : media.mimetype,
+          audio: fs.readFileSync(pathMedia),
+          mimetype: "audio/ogg; codecs=opus",
           ptt: true,
-          contextInfo: { forwardingScore: isForwarded ? 2 : 0, isForwarded: isForwarded }
         };
       } else {
-        const convert = await processAudioFile(media.path);
+        // Converte para OGG se não for
+        const convert = await processAudio(pathMedia, companyId);
         options = {
           audio: fs.readFileSync(convert),
-          mimetype: typeAudio ? "audio/mp4" : media.mimetype,
-          contextInfo: { forwardingScore: isForwarded ? 2 : 0, isForwarded: isForwarded }
+          mimetype: "audio/ogg; codecs=opus",
+          ptt: true
         };
       }
-    } else if (typeMessage === "document" || typeMessage === "text") {
+    } else if (typeMessage === "document" || mimeType === "application/pdf") {
       options = {
         document: fs.readFileSync(pathMedia),
         caption: bodyMessage,
-        fileName: media.originalname,
-        mimetype: media.mimetype,
-        contextInfo: { forwardingScore: isForwarded ? 2 : 0, isForwarded: isForwarded }
+        fileName: fileName,
+        mimetype: mimeType
       };
-    } else if (typeMessage === "application") {
-      options = {
-        document: fs.readFileSync(pathMedia),
-        caption: bodyMessage,
-        fileName: media.originalname,
-        mimetype: media.mimetype,
-        contextInfo: { forwardingScore: isForwarded ? 2 : 0, isForwarded: isForwarded }
-      };
-    } else {
+    } else if (typeMessage === "image") {
       options = {
         image: fs.readFileSync(pathMedia),
+        caption: bodyMessage
+      };
+    } else {
+      // Caso o tipo de mídia não seja reconhecido, trata como documento
+      options = {
+        document: fs.readFileSync(pathMedia),
         caption: bodyMessage,
-        contextInfo: { forwardingScore: isForwarded ? 2 : 0, isForwarded: isForwarded }
+        fileName: fileName,
+        mimetype: mimeType
       };
     }
 
     const sentMessage = await wbot.sendMessage(
-      `${ticket.contact.number}@${ticket.isGroup ? "g.us" : "s.whatsapp.net"}`,
+      number, 
       {
         ...options
       }
     );
 
-    await ticket.update({ lastMessage: bodyMessage });
+    await ticket.update({ lastMessage: bodyMessage || media.filename });
 
     return sentMessage;
   } catch (err) {

@@ -9,21 +9,27 @@ import ShowContactService from "../services/ContactServices/ShowContactService";
 import UpdateContactService from "../services/ContactServices/UpdateContactService";
 import DeleteContactService from "../services/ContactServices/DeleteContactService";
 import GetContactService from "../services/ContactServices/GetContactService";
+import MergeContactsService from "../services/ContactServices/MergeContactsService";
+import ListContactMediaService from "../services/ContactServices/ListContactMediaService";
+import GetContactDashboardService from "../services/ContactServices/GetContactDashboardService";
 
 import CheckContactNumber from "../services/WbotServices/CheckNumber";
 import CheckIsValidContact from "../services/WbotServices/CheckIsValidContact";
 import GetProfilePicUrl from "../services/WbotServices/GetProfilePicUrl";
 import AppError from "../errors/AppError";
 import SimpleListService, {
-  SearchContactParams
+  SearchContactParams,
 } from "../services/ContactServices/SimpleListService";
 import ContactCustomField from "../models/ContactCustomField";
-import {head} from "lodash";
-import {ImportContacts} from "../services/ContactServices/ImportContacts";
+import { head } from "lodash";
+import { ImportContacts } from "../services/ContactServices/ImportContacts";
 
+// Atualize o tipo IndexQuery
 type IndexQuery = {
   searchParam: string;
   pageNumber: string;
+  filterDate?: string;
+  tags?: string | string[]; // Aceita string ou array de strings
 };
 
 type IndexGetContactQuery = {
@@ -35,21 +41,37 @@ interface ExtraInfo extends ContactCustomField {
   name: string;
   value: string;
 }
+
+// Interface atualizada com os novos campos
 interface ContactData {
   name: string;
   number: string;
   email?: string;
   extraInfo?: ExtraInfo[];
+  disableBot?: boolean;
+  // Novos campos
+  gender?: string;
+  personType?: string;
+  cpf?: string;
+  cnpj?: string;
+  businessName?: string;
+  birthdayDate?: string;
+  state?: string;
+  city?: string;
+  address?: string;
+  reference?: string;
 }
 
 export const index = async (req: Request, res: Response): Promise<Response> => {
-  const { searchParam, pageNumber } = req.query as IndexQuery;
+  const { searchParam, pageNumber, filterDate, tags } = req.query as IndexQuery;
   const { companyId } = req.user;
 
   const { contacts, count, hasMore } = await ListContactsService({
     searchParam,
     pageNumber,
-    companyId
+    companyId,
+    filterDate,
+    tags,
   });
 
   return res.json({ contacts, count, hasMore });
@@ -57,7 +79,7 @@ export const index = async (req: Request, res: Response): Promise<Response> => {
 
 export const getContact = async (
   req: Request,
-  res: Response
+  res: Response,
 ): Promise<Response> => {
   const { name, number } = req.body as IndexGetContactQuery;
   const { companyId } = req.user;
@@ -65,10 +87,62 @@ export const getContact = async (
   const contact = await GetContactService({
     name,
     number,
-    companyId
+    companyId,
   });
 
   return res.status(200).json(contact);
+};
+
+export const merge = async (req: Request, res: Response): Promise<Response> => {
+  const { originId, targetId } = req.body;
+  const { companyId } = req.user;
+
+  console.log("==========================================");
+  console.log("[ContactController] Iniciando Mesclagem");
+  console.log(`Empresa: ${companyId}`);
+  console.log(`Origem (será deletado): ${originId}`);
+  console.log(`Destino (será mantido): ${targetId}`);
+  console.log("==========================================");
+
+  try {
+    await MergeContactsService({
+      originId,
+      targetId,
+      companyId,
+    });
+
+    return res.status(200).json({ message: "Contatos mesclados com sucesso." });
+  } catch (err) {
+    console.error("[ContactController] Erro Fatal na Mesclagem:", err);
+    throw err;
+  }
+};
+
+export const listMedia = async (
+  req: Request,
+  res: Response,
+): Promise<Response> => {
+  const { contactId } = req.params;
+  const { pageNumber, filterDate } = req.query;
+  const { companyId } = req.user;
+
+  const { messages, hasMore, count } = await ListContactMediaService({
+    contactId: parseInt(contactId),
+    companyId,
+    pageNumber: pageNumber as string,
+    filterDate: filterDate as string,
+  });
+
+  return res.json({ messages, hasMore, count });
+};
+
+export const getDashboard = async (
+  req: Request,
+  res: Response,
+): Promise<Response> => {
+  const { companyId } = req.user;
+  const dashboardData = await GetContactDashboardService(companyId);
+  return res.json(dashboardData);
 };
 
 export const store = async (req: Request, res: Response): Promise<Response> => {
@@ -80,7 +154,7 @@ export const store = async (req: Request, res: Response): Promise<Response> => {
     name: Yup.string().required(),
     number: Yup.string()
       .required()
-      .matches(/^\d+$/, "Invalid number format. Only numbers is allowed.")
+      .matches(/^\d+$/, "Invalid number format. Only numbers is allowed."),
   });
 
   try {
@@ -90,39 +164,35 @@ export const store = async (req: Request, res: Response): Promise<Response> => {
   }
 
   await CheckIsValidContact(newContact.number, companyId);
-  const validNumber = await CheckContactNumber(newContact.number, companyId);
-  const number = validNumber.jid.replace(/\D/g, "");
-  newContact.number = number;
+     const validNumber = await CheckContactNumber(newContact.number, companyId); // Pode estar lento
+     const number = validNumber.jid.replace(/\D/g, "");
+     newContact.number = number;
 
-    // Check if the contact already exists
-    const existingContact = await Contact.findOne({
-      where: {
-        number: newContact.number,
-        companyId
-      }
-    });
-    
-    if (existingContact) {
-      // Contact already exists, send the existing contact data as the response
-      return res.status(200).json({ alreadyExists: true, existingContact });
-    }
+  // Check if the contact already exists
+  const existingContact = await Contact.findOne({
+    where: {
+      number: newContact.number,
+      companyId,
+    },
+  });
 
-  /**
-   * Código desabilitado por demora no retorno
-   */
-  // const profilePicUrl = await GetProfilePicUrl(validNumber.jid, companyId);
+  if (existingContact) {
+    return res.status(200).json({ alreadyExists: true, existingContact });
+  }
 
   const contact = await CreateContactService({
     ...newContact,
-    // profilePicUrl,
-    companyId
+    companyId,
   });
 
   const io = getIO();
-  io.to(`company-${companyId}-mainchannel`).emit(`company-${companyId}-contact`, {
-    action: "create",
-    contact
-  });
+  io.to(`company-${companyId}-mainchannel`).emit(
+    `company-${companyId}-contact`,
+    {
+      action: "create",
+      contact,
+    },
+  );
 
   return res.status(200).json(contact);
 };
@@ -138,7 +208,7 @@ export const show = async (req: Request, res: Response): Promise<Response> => {
 
 export const update = async (
   req: Request,
-  res: Response
+  res: Response,
 ): Promise<Response> => {
   const contactData: ContactData = req.body;
   const { companyId } = req.user;
@@ -147,8 +217,8 @@ export const update = async (
     name: Yup.string(),
     number: Yup.string().matches(
       /^\d+$/,
-      "Invalid number format. Only numbers is allowed."
-    )
+      "Invalid number format. Only numbers is allowed.",
+    ),
   });
 
   try {
@@ -158,30 +228,33 @@ export const update = async (
   }
 
   await CheckIsValidContact(contactData.number, companyId);
-  const validNumber = await CheckContactNumber(contactData.number, companyId);
-  const number = validNumber.jid.replace(/\D/g, "");
-  contactData.number = number;
+     const validNumber = await CheckContactNumber(contactData.number, companyId);
+     const number = validNumber.jid.replace(/\D/g, "");
+     contactData.number = number;
 
   const { contactId } = req.params;
 
   const contact = await UpdateContactService({
     contactData,
     contactId,
-    companyId
+    companyId,
   });
 
   const io = getIO();
-  io.to(`company-${companyId}-mainchannel`).emit(`company-${companyId}-contact`, {
-    action: "update",
-    contact
-  });
+  io.to(`company-${companyId}-mainchannel`).emit(
+    `company-${companyId}-contact`,
+    {
+      action: "update",
+      contact,
+    },
+  );
 
   return res.status(200).json(contact);
 };
 
 export const remove = async (
   req: Request,
-  res: Response
+  res: Response,
 ): Promise<Response> => {
   const { contactId } = req.params;
   const { companyId } = req.user;
@@ -191,10 +264,13 @@ export const remove = async (
   await DeleteContactService(contactId);
 
   const io = getIO();
-  io.to(`company-${companyId}-mainchannel`).emit(`company-${companyId}-contact`, {
-    action: "delete",
-    contactId
-  });
+  io.to(`company-${companyId}-mainchannel`).emit(
+    `company-${companyId}-contact`,
+    {
+      action: "delete",
+      contactId,
+    },
+  );
 
   return res.status(200).json({ message: "Contact deleted" });
 };
@@ -217,17 +293,20 @@ export const upload = async (req: Request, res: Response) => {
 
   const io = getIO();
 
-  io.to(`company-${companyId}-mainchannel`).emit(`company-${companyId}-contact`, {
-    action: "create",
-    records: response
-  });
+  io.to(`company-${companyId}-mainchannel`).emit(
+    `company-${companyId}-contact`,
+    {
+      action: "create",
+      records: response,
+    },
+  );
 
   return res.status(200).json(response);
 };
 
 export const getContactVcard = async (
   req: Request,
-  res: Response
+  res: Response,
 ): Promise<Response> => {
   const { name, number } = req.query as IndexGetContactQuery;
   const { companyId } = req.user;
@@ -237,22 +316,18 @@ export const getContactVcard = async (
   const numberDDD = vNumber.toString().substr(2, 2);
   const numberUser = vNumber.toString().substr(-8, 8);
 
-  if (numberDDD <= '30' && numberDDI === '55') {
-    console.log("menor 30")
+  if (numberDDD <= "30" && numberDDI === "55") {
     vNumber = `${numberDDI + numberDDD + 9 + numberUser}@s.whatsapp.net`;
-  } else if (numberDDD > '30' && numberDDI === '55') {
-    console.log("maior 30")
+  } else if (numberDDD > "30" && numberDDI === "55") {
     vNumber = `${numberDDI + numberDDD + numberUser}@s.whatsapp.net`;
   } else {
     vNumber = `${number}@s.whatsapp.net`;
   }
 
-  console.log(vNumber);
-
   const contact = await GetContactService({
     name,
     number,
-    companyId
+    companyId,
   });
 
   return res.status(200).json(contact);

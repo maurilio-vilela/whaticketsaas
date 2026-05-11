@@ -11,6 +11,7 @@ import DeleteService from "../services/TagServices/DeleteService";
 import SimpleListService from "../services/TagServices/SimpleListService";
 import SyncTagService from "../services/TagServices/SyncTagsService";
 import KanbanListService from "../services/TagServices/KanbanListService";
+import SyncKanbanTagsService from "../services/TagServices/SyncKanbanTagsService";
 
 type IndexQuery = {
   searchParam?: string;
@@ -65,6 +66,14 @@ export const show = async (req: Request, res: Response): Promise<Response> => {
   const tag = await ShowService(tagId);
 
   return res.status(200).json(tag);
+};
+
+export const syncKanbanTags = async (req: Request, res: Response): Promise<Response> => {
+  const { tags } = req.body;
+
+  await SyncKanbanTagsService({ tags });
+
+  return res.status(200).json({ message: "Tags sincronizadas com sucesso" });
 };
 
 export const update = async (

@@ -8,6 +8,10 @@ import CreateContactService from "../ContactServices/CreateContactService";
 import { isString, isArray } from "lodash";
 import path from "path";
 import fs from 'fs';
+import { promisify } from 'util';
+
+const writeFileAsync = promisify(fs.writeFile);
+const mkdirAsync = promisify(fs.mkdir);
 
 const ImportContactsService = async (companyId: number): Promise<void> => {
   const defaultWhatsapp = await GetDefaultWhatsApp(companyId);
@@ -20,14 +24,19 @@ const ImportContactsService = async (companyId: number): Promise<void> => {
     phoneContacts = JSON.parse(JSON.stringify(contactsString.contacts));
 
     const publicFolder = path.resolve(__dirname, "..", "..", "..", "public");
-    const beforeFilePath = path.join(publicFolder, 'contatos_antes.txt');
-    fs.writeFile(beforeFilePath, JSON.stringify(phoneContacts, null, 2), (err) => {
-      if (err) {
-        logger.error(`Failed to write contacts to file: ${err}`);
-        throw err;
-      }
-      console.log('O arquivo contatos_antes.txt foi criado!');
-    });
+    const companyFolder = path.join(publicFolder, `company${companyId}`);
+    
+    // Create company folder if it doesn't exist
+    try {
+      await mkdirAsync(companyFolder, { recursive: true });
+    } catch (err) {
+      logger.error(`Failed to create company folder: ${err}`);
+      throw err;
+    }
+
+    const beforeFilePath = path.join(companyFolder, 'contatos_antes.txt');
+    await writeFileAsync(beforeFilePath, JSON.stringify(phoneContacts, null, 2));
+    console.log(`O arquivo contatos_antes.txt foi criado na pasta company${companyId}!`);
 
   } catch (err) {
     Sentry.captureException(err);
@@ -35,13 +44,15 @@ const ImportContactsService = async (companyId: number): Promise<void> => {
   }
 
   const publicFolder = path.resolve(__dirname, "..", "..", "..", "public");
-  const afterFilePath = path.join(publicFolder, 'contatos_depois.txt');
-  fs.writeFile(afterFilePath, JSON.stringify(phoneContacts, null, 2), (err) => {
-    if (err) {
-      logger.error(`Failed to write contacts to file: ${err}`);
-      throw err;
-    }
-  });
+  const companyFolder = path.join(publicFolder, `company${companyId}`);
+  const afterFilePath = path.join(companyFolder, 'contatos_depois.txt');
+  
+  try {
+    await writeFileAsync(afterFilePath, JSON.stringify(phoneContacts, null, 2));
+  } catch (err) {
+    logger.error(`Failed to write contacts to file: ${err}`);
+    throw err;
+  }
 
   const phoneContactsList = isString(phoneContacts)
     ? JSON.parse(phoneContacts)

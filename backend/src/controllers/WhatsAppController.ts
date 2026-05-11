@@ -51,6 +51,7 @@ export const store = async (req: Request, res: Response): Promise<Response> => {
     isDefault,
     greetingMessage,
     complationMessage,
+	ratingMessage,
     outOfHoursMessage,
     queueIds,
     token,
@@ -72,6 +73,7 @@ export const store = async (req: Request, res: Response): Promise<Response> => {
     isDefault,
     greetingMessage,
     complationMessage,
+	ratingMessage,
     outOfHoursMessage,
     queueIds,
     companyId,
@@ -172,12 +174,41 @@ export const restart = async (
   res: Response
 ): Promise<Response> => {
   const { companyId, profile } = req.user;
+  const { whatsappId } = req.params; // Pega o ID da rota nova
 
-  if (profile !== "admin") {
-    throw new AppError("ERR_NO_PERMISSION", 403);
+  // Lógica para reiniciar TUDO (rota antiga ou botão nuclear)
+  if (!whatsappId) {
+      if (profile !== "admin") {
+        throw new AppError("ERR_NO_PERMISSION", 403);
+      }
+      await restartWbot(companyId);
+      return res.status(200).json({ message: "Whatsapp restart." });
   }
 
-  await restartWbot(companyId);
+  // Lógica para reiniciar SÓ UMA CONEXÃO (rota nova)
+  try {
+      const whatsapp = await ShowWhatsAppService(whatsappId, companyId);
+      
+      // Derruba a conexão atual sem apagar sessão
+      await removeWbot(+whatsappId, false);
+      
+      // Atualiza status visualmente
+      await whatsapp.update({ status: "OPENING" });
+      
+      const io = getIO();
+      io.to(`company-${companyId}-mainchannel`).emit(`company-${companyId}-whatsapp`, {
+        action: "update",
+        whatsapp
+      });
 
-  return res.status(200).json({ message: "Whatsapp restart." });
+      // Inicia nova conexão limpa (força history sync)
+      StartWhatsAppSession(whatsapp, companyId);
+
+      return res.status(200).json({ message: "WhatsApp session restarted." });
+
+  } catch (err) {
+      // Se não achar a sessão ou der erro, tenta restart genérico
+      console.log(err);
+      throw new AppError("ERR_RESTARTING_SESSION");
+  }
 };

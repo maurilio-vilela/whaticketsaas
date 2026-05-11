@@ -8,11 +8,13 @@ interface IOnWhatsapp {
 }
 
 const checker = async (number: string, wbot: any) => {
-  const [validNumber] = await wbot.onWhatsApp(`${number}@s.whatsapp.net`);
-
-  logger.info(validNumber);
-
-  return validNumber;
+  try {
+    const [validNumber] = await wbot.onWhatsApp(`${number}@s.whatsapp.net`);
+    return validNumber;
+  } catch (err) {
+    logger.error(`[CheckNumber] Falha na comunicação com o WhatsApp ao checar o número ${number}: ${err}`);
+    return undefined; // Retorna undefined de forma segura se a rede oscilar
+  }
 };
 
 const CheckContactNumber = async (
@@ -24,9 +26,14 @@ const CheckContactNumber = async (
   const wbot = getWbot(defaultWhatsapp.id);
   const isNumberExit = await checker(number, wbot);
 
-  if (!isNumberExit.exists) {
+  // =========================================================================
+  // BLINDAGEM MESTRA: Verifica se a variável existe ANTES de ler o .exists
+  // =========================================================================
+  if (!isNumberExit || !isNumberExit.exists) {
+    logger.warn(`[CheckNumber] O número ${number} é inválido, não possui WhatsApp ou a API da Meta rejeitou o formato.`);
     throw new Error("ERR_CHECK_NUMBER");
   }
+
   return isNumberExit;
 };
 
