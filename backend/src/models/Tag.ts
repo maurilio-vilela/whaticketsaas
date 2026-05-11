@@ -50,6 +50,9 @@ class Tag extends Model<Tag> {
   @Column
   kanban: number;
   
+  @Column({ defaultValue: false })
+  autoArchive: boolean;
+  
   @Column
   position: number;
 }

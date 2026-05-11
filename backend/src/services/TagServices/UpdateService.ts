@@ -9,6 +9,7 @@ interface TagData {
   name?: string;
   color?: string;
   kanban?: number;
+  autoArchive?: boolean;
 }
 
 interface Request {
@@ -26,7 +27,7 @@ const UpdateUserService = async ({
     name: Yup.string().min(3)
   });
 
-  const { name, color, kanban } = tagData;
+  const { name, color, kanban, autoArchive } = tagData;
 
   try {
     await schema.validate({ name });

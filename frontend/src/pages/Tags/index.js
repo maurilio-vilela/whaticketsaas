@@ -1,3 +1,4 @@
+import { useHistory } from "react-router-dom";
 import React, {
   useState,
   useEffect,
@@ -93,6 +94,7 @@ const useStyles = makeStyles((theme) => ({
 
 const Tags = () => {
   const classes = useStyles();
+  const history = useHistory();
 
   const { user } = useContext(AuthContext);
 
@@ -238,6 +240,13 @@ return (
             onClick={handleOpenTagModal}
           >
             {i18n.t("tags.buttons.add")}
+          </Button>
+          <Button
+            variant="outlined"
+            color="primary"
+            onClick={() => history.push("/kanban")}
+          >
+            Ver Kanban
           </Button>		  
         </MainHeaderButtonsWrapper>
       </MainHeader>

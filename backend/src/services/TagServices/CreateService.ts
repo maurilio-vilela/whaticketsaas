@@ -7,6 +7,7 @@ interface Request {
   name: string;
   color: string;
   kanban: number;
+  autoArchive?: boolean;
   companyId: number;
 }
 
@@ -27,8 +28,8 @@ const CreateService = async ({
   }
 
   const [tag] = await Tag.findOrCreate({
-    where: { name, color, companyId, kanban },
-    defaults: { name, color, companyId, kanban }
+    where: { name, color, companyId, kanban, autoArchive },
+    defaults: { name, color, companyId, kanban, autoArchive }
   });
 
   await tag.reload();

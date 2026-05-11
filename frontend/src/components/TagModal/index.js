@@ -76,7 +76,9 @@ const TagModal = ({ open, onClose, tagId, reload }) => {
 	const initialState = {
 		name: "",
 		color: "",
-		kanban: 0
+		kanban: 0,
+		autoArchive: false,
+		autoArchive: false
 	};
 
 	const [tag, setTag] = useState(initialState);
@@ -211,7 +213,20 @@ const TagModal = ({ open, onClose, tagId, reload }) => {
             								/>
           								}
           								label="Kanban"
-          								labelPlacement="start"
+        													/>
+								</div>
+								<div className={classes.multFieldLine}>
+									<FormControlLabel
+										control={
+											<Checkbox
+												checked={values.autoArchive === true}
+												onChange={(e) => setTag(prev => ({ ...prev, autoArchive: e.target.checked }))}
+												name="autoArchive"
+												color="primary"
+											/>
+										}
+										label="Auto-Arquivar (Finalizar ticket ao inserir tag)"
+										labelPlacement="end"
         							/>
       							</div>
       							<br />
