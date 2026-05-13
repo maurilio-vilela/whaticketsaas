@@ -194,6 +194,12 @@ const TicketDealModal = ({ modalOpen, onClose, ticket, dealId }) => {
                 await api.post("/deals", dealData);
             }
 
+            if (ticket?.id) {
+                await api.put(`/tickets/${ticket.id}`, {
+                    dealValue: totalValue,
+                });
+            }
+
             toast.success("Oportunidade salva com sucesso!");
             handleClose();
         } catch (err) {
