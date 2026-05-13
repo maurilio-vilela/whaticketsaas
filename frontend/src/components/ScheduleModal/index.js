@@ -36,44 +36,41 @@ import { AuthContext } from "../../context/Auth/AuthContext";
 import { isArray, capitalize } from "lodash";
 
 const useStyles = makeStyles(theme => ({
-	root: {
-		display: "flex",
-		flexWrap: "wrap",
+	root: { display: "flex", flexWrap: "wrap" },
+	modalPaper: {
+		borderRadius: 16,
+		overflow: "hidden",
+	},
+	dialogTitle: {
+		background: "linear-gradient(135deg, #0ea5e9 0%, #2563eb 100%)",
+		color: "#fff",
+		padding: theme.spacing(2, 3),
+	},
+	dialogContent: {
+		padding: theme.spacing(3),
+		background: theme.palette.mode === "dark" ? "#111827" : "#f8fafc",
+	},
+	sectionCard: {
+		background: theme.palette.background.paper,
+		border: `1px solid ${theme.palette.divider}`,
+		borderRadius: 12,
+		padding: theme.spacing(2),
+		marginBottom: theme.spacing(2),
 	},
 	multFieldLine: {
 		display: "flex",
-		"& > *:not(:last-child)": {
-			marginRight: theme.spacing(1),
-		},
+		gap: theme.spacing(1),
+		"& > *": { flex: 1 },
+		[theme.breakpoints.down("sm")]: { flexDirection: "column" },
 	},
-
-	btnWrapper: {
-		position: "relative",
-	},
-
+	btnWrapper: { position: "relative" },
 	buttonProgress: {
-		color: green[500],
-		position: "absolute",
-		top: "50%",
-		left: "50%",
-		marginTop: -12,
-		marginLeft: -12,
+		color: green[500], position: "absolute", top: "50%", left: "50%", marginTop: -12, marginLeft: -12,
 	},
-	formControl: {
-		margin: theme.spacing(1),
-		minWidth: 120,
-	},
-	recurrenceContainer: {
-		backgroundColor: '#f1f8e9', // Cor de fundo semelhante à do Google Agenda
-		padding: theme.spacing(2),
-		borderRadius: theme.spacing(1),
-		maxWidth: '600px', // Ajuste conforme necessário
-		margin: '0 auto', // Centraliza na tela
-	},
-	selectContainer: {
-		width: "100%",
-		textAlign: "left",
-	},
+	sectionTitle: { fontWeight: 700, marginBottom: theme.spacing(1) },
+	selectContainer: { width: "100%", textAlign: "left" },
+	daysContainer: { display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 },
+	dialogActions: { padding: theme.spacing(2, 3), borderTop: `1px solid ${theme.palette.divider}` },
 }));
 
 const ScheduleSchema = Yup.object().shape({
@@ -289,12 +286,13 @@ const ScheduleModal = ({ open, onClose, scheduleId, contactId, cleanContact, rel
 			<Dialog
 				open={open}
 				onClose={handleClose}
-				maxWidth="xs"
+				maxWidth="md"
 				fullWidth
 				scroll="paper"
+				PaperProps={{ className: classes.modalPaper }}
 			>
-				<DialogTitle id="form-dialog-title">
-					{schedule.status === 'ERRO' ? 'Erro de Envio' : `Mensagem ${capitalize(schedule.status)}`}
+				<DialogTitle id="form-dialog-title" className={classes.dialogTitle}>
+					{schedule.status === 'ERRO' ? 'Erro de Envio' : `Agendamento de Mensagem • ${capitalize(schedule.status || "novo")}`}
 				</DialogTitle>
 				<Formik
 					initialValues={schedule}
@@ -309,7 +307,7 @@ const ScheduleModal = ({ open, onClose, scheduleId, contactId, cleanContact, rel
 				>
 					{({ touched, errors, isSubmitting, values, setFieldValue }) => (
 						<Form>
-							<DialogContent dividers>
+							<DialogContent dividers className={classes.dialogContent}>
 								<div className={classes.multFieldLine}>
 									<FormControl
 										variant="outlined"
@@ -559,7 +557,7 @@ const ScheduleModal = ({ open, onClose, scheduleId, contactId, cleanContact, rel
 									</Grid>
 								)}
 							</DialogContent>
-							<DialogActions>
+							<DialogActions className={classes.dialogActions}>
 								<Button
 									onClick={handleClose}
 									color="secondary"
