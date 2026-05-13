@@ -10,8 +10,12 @@ const useStyles = makeStyles((theme) => ({
         overflowX: "auto",
         paddingBottom: "10px",
         [theme.breakpoints.down("sm")]: {
-            gap: "10px",
+            display: "grid",
+            gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+            gap: "8px",
             marginBottom: "14px",
+            overflowX: "visible",
+            paddingBottom: 0,
         },
         "&::-webkit-scrollbar": {
             height: "6px",
@@ -34,7 +38,8 @@ const useStyles = makeStyles((theme) => ({
         transition: "transform 0.2s ease",
         [theme.breakpoints.down("sm")]: {
             padding: "10px",
-            minWidth: "180px",
+            minWidth: "unset",
+            width: "100%",
             gap: "10px",
         },
         "&:hover": {
