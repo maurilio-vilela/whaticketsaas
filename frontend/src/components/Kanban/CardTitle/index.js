@@ -1,7 +1,7 @@
 import { Avatar, makeStyles, Tooltip, Typography } from "@material-ui/core";
 import React, { useState } from "react";
 import { format, isSameDay, parseISO } from "date-fns";
-import ContactModal from "../../ContactModal";
+import ContactManagementModal from "../../ContactManagementModal";
 
 const useStyles = makeStyles((theme) => ({
     cardContainer: {
@@ -112,7 +112,7 @@ const CardTitle = ({ ticket, onEditValue }) => {
 
     return (
         <>
-            <ContactModal
+            <ContactManagementModal
                 open={contactModalOpen}
                 onClose={() => setContactModalOpen(false)}
                 contactId={ticket.contact.id}
