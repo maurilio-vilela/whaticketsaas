@@ -9,6 +9,10 @@ const useStyles = makeStyles((theme) => ({
         marginBottom: "20px",
         overflowX: "auto",
         paddingBottom: "10px",
+        [theme.breakpoints.down("sm")]: {
+            gap: "10px",
+            marginBottom: "14px",
+        },
         "&::-webkit-scrollbar": {
             height: "6px",
         },
@@ -28,6 +32,11 @@ const useStyles = makeStyles((theme) => ({
         boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.05)",
         flex: "1 1 auto",
         transition: "transform 0.2s ease",
+        [theme.breakpoints.down("sm")]: {
+            padding: "10px",
+            minWidth: "180px",
+            gap: "10px",
+        },
         "&:hover": {
             transform: "translateY(-3px)",
             boxShadow: "0 10px 15px -3px rgba(0, 0, 0, 0.1)",
@@ -41,36 +50,52 @@ const useStyles = makeStyles((theme) => ({
         alignItems: "center",
         justifyContent: "center",
         flexShrink: 0,
+        [theme.breakpoints.down("sm")]: {
+            width: "40px",
+            height: "40px",
+            borderRadius: "10px",
+        },
     },
     kpiContent: {
         display: "flex",
         flexDirection: "column",
     },
     kpiLabel: {
-        fontSize: "0.85rem",
+        fontSize: "0.78rem",
         color: theme.palette.text.secondary,
         fontWeight: "500",
         marginBottom: "4px",
+        [theme.breakpoints.down("sm")]: {
+            fontSize: "0.72rem",
+        },
     },
     kpiValue: {
-        fontSize: "1.4rem",
+        fontSize: "1.2rem",
         fontWeight: "700",
         color: theme.palette.text.primary,
         lineHeight: 1.2,
+        [theme.breakpoints.down("sm")]: {
+            fontSize: "1rem",
+        },
     },
     kpiSub: {
-        fontSize: "0.75rem",
+        fontSize: "0.7rem",
         color: theme.palette.text.hint,
         marginTop: "4px",
+        [theme.breakpoints.down("sm")]: {
+            fontSize: "0.65rem",
+        },
     },
 }));
 
 export const formatBRL = (value) => {
-    let v = String(value || 0).replace(/\D/g, "");
-    v = (v / 100).toFixed(2) + "";
-    v = v.replace(".", ",");
-    v = v.replace(/(\d)(?=(\d{3})+(?!\d))/g, "$1.");
-    return v;
+    const numeric = Number(value || 0);
+    return new Intl.NumberFormat("pt-BR", {
+        style: "currency",
+        currency: "BRL",
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+    }).format(Number.isFinite(numeric) ? numeric : 0);
 };
 
 const KpiCard = ({ icon, color, label, value, sub, visible, classes }) => {

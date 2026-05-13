@@ -673,20 +673,23 @@ const Kanban = () => {
         const lostStages = ["perdido"];
 
         filtered.forEach((ticket) => {
-            const ticketValue = parseFloat(ticket.dealValue) || 0;
-            if (ticket.tags.length === 0) return;
-            ticket.tags.forEach((tag) => {
-                const tagName = tag.name.toLowerCase();
-                if (activeStages.some((stage) => tagName.includes(stage))) activeCount++;
-                if (wonStages.some((stage) => tagName.includes(stage))) {
-                    wonCount++;
-                    wonValue += ticketValue;
-                }
-                if (lostStages.some((stage) => tagName.includes(stage))) {
-                    lostCount++;
-                    lostValue += ticketValue;
-                }
-            });
+            const ticketValue = Number(ticket.dealValue) || 0;
+            if (!ticket.tags || ticket.tags.length === 0) return;
+
+            const tagNames = ticket.tags.map((tag) => String(tag.name || "").toLowerCase());
+            const isActive = tagNames.some((tagName) => activeStages.some((stage) => tagName.includes(stage)));
+            const isWon = tagNames.some((tagName) => wonStages.some((stage) => tagName.includes(stage)));
+            const isLost = tagNames.some((tagName) => lostStages.some((stage) => tagName.includes(stage)));
+
+            if (isActive) activeCount++;
+            if (isWon) {
+                wonCount++;
+                wonValue += ticketValue;
+            }
+            if (isLost) {
+                lostCount++;
+                lostValue += ticketValue;
+            }
         });
 
         const avgTicket = wonCount > 0 ? wonValue / wonCount : 0;
